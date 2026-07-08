@@ -34,7 +34,7 @@
             >
               Previous
             </button>
-            <p id="projects-page-info" class="text-xs text-gray-500">Page 1</p>
+            <p id="projects-page-info" class="text-xs text-gray-500">0-0</p>
             <button
               id="next-projects-btn"
               type="button"
@@ -56,12 +56,16 @@
             id="sync-btn"
             type="button"
             disabled
-            class="w-full rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            class="flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            Send files to SharePoint
+            <svg id="sync-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span id="sync-btn-label">Send files to SharePoint</span>
           </button>
 
-          <!-- Progress -->
+          <!-- Single-project progress -->
           <div id="progress-box" class="mt-4 hidden">
             <div class="mb-1 flex justify-between text-sm text-gray-600">
               <span id="progress-text">Uploading…</span>
@@ -88,6 +92,74 @@
           </div>
         </section>
       </div>
+
+      <!-- Send all projects -->
+      <section class="mt-4 rounded border border-gray-200 bg-white p-4">
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <button
+            id="sync-all-btn"
+            type="button"
+            disabled
+            class="flex flex-1 items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            <svg id="sync-all-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span id="sync-all-btn-label">Send all projects files to SharePoint</span>
+          </button>
+          <button
+            id="pause-sync-all-btn"
+            type="button"
+            disabled
+            class="rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Pause
+          </button>
+          <button
+            id="resume-sync-all-btn"
+            type="button"
+            disabled
+            class="rounded border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Resume
+          </button>
+        </div>
+        <p id="sync-all-hint" class="mt-2 text-xs text-gray-500">
+          Waiting until all projects finish loading…
+        </p>
+
+        <div id="sync-all-progress-box" class="mt-4 hidden">
+          <div class="mb-1 flex justify-between text-sm text-gray-600">
+            <span id="sync-all-progress-text">Waiting…</span>
+            <span id="sync-all-progress-percent">0%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded bg-gray-200">
+            <div id="sync-all-progress-bar" class="h-full w-0 bg-emerald-600 transition-all"></div>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 text-center text-sm sm:grid-cols-4">
+            <div class="rounded bg-gray-50 p-2">
+              <div id="sync-all-projects-done" class="text-lg font-semibold">0</div>
+              <div class="text-xs text-gray-500">Projects done</div>
+            </div>
+            <div class="rounded bg-gray-50 p-2">
+              <div id="sync-all-projects-total" class="text-lg font-semibold">0</div>
+              <div class="text-xs text-gray-500">Projects total</div>
+            </div>
+            <div class="rounded bg-green-50 p-2">
+              <div id="sync-all-files-ok" class="text-lg font-semibold text-green-700">0</div>
+              <div class="text-xs text-gray-500">Files uploaded</div>
+            </div>
+            <div class="rounded bg-red-50 p-2">
+              <div id="sync-all-files-fail" class="text-lg font-semibold text-red-700">0</div>
+              <div class="text-xs text-gray-500">Files failed</div>
+            </div>
+          </div>
+
+          <ul id="sync-all-result-list" class="mt-3 max-h-72 space-y-1 overflow-y-auto text-sm"></ul>
+        </div>
+      </section>
     </div>
 
     <script src="/app.js"></script>

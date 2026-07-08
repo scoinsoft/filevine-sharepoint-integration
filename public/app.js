@@ -4,6 +4,7 @@
     selected: null,
     documents: [],
     syncing: false,
+    syncingAll: false,
     paging: {
       offset: 0,
       pageSize: 100,
@@ -15,6 +16,15 @@
       inFlight: new Map(),
       prefetchRunning: false,
       allLoaded: false,
+    },
+    syncAll: {
+      projectsTotal: 0,
+      projectsDone: 0,
+      filesOk: 0,
+      filesFail: 0,
+      currentProjectName: '',
+      paused: false,
+      pauseResolver: null,
     },
   };
 
@@ -33,6 +43,8 @@
     filesStatus: $('files-status'),
     filesList: $('files-list'),
     syncBtn: $('sync-btn'),
+    syncBtnLabel: $('sync-btn-label'),
+    syncBtnSpinner: $('sync-btn-spinner'),
     progressBox: $('progress-box'),
     progressText: $('progress-text'),
     progressPercent: $('progress-percent'),
@@ -41,6 +53,21 @@
     statOk: $('stat-ok'),
     statFail: $('stat-fail'),
     resultList: $('result-list'),
+    syncAllBtn: $('sync-all-btn'),
+    syncAllBtnLabel: $('sync-all-btn-label'),
+    syncAllBtnSpinner: $('sync-all-btn-spinner'),
+    pauseSyncAllBtn: $('pause-sync-all-btn'),
+    resumeSyncAllBtn: $('resume-sync-all-btn'),
+    syncAllHint: $('sync-all-hint'),
+    syncAllProgressBox: $('sync-all-progress-box'),
+    syncAllProgressText: $('sync-all-progress-text'),
+    syncAllProgressPercent: $('sync-all-progress-percent'),
+    syncAllProgressBar: $('sync-all-progress-bar'),
+    syncAllProjectsDone: $('sync-all-projects-done'),
+    syncAllProjectsTotal: $('sync-all-projects-total'),
+    syncAllFilesOk: $('sync-all-files-ok'),
+    syncAllFilesFail: $('sync-all-files-fail'),
+    syncAllResultList: $('sync-all-result-list'),
   };
 
   function escapeHtml(value) {
@@ -69,9 +96,118 @@
     els.error.classList.remove('hidden');
   }
 
+  function setButtonLoading(spinnerEl, labelEl, loading, idleText, loadingText) {
+    if (loading) {
+      spinnerEl.classList.remove('hidden');
+      labelEl.textContent = loadingText;
+    } else {
+      spinnerEl.classList.add('hidden');
+      labelEl.textContent = idleText;
+    }
+  }
+
+  function getAllCachedProjects() {
+    const projects = [];
+    const seen = new Set();
+
+    const offsets = [...state.paging.pageCache.keys()].sort((a, b) => a - b);
+    for (const offset of offsets) {
+      const page = state.paging.pageCache.get(offset);
+      for (const project of page?.projects || []) {
+        const key = String(project.projectId);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        projects.push(project);
+      }
+    }
+
+    return projects;
+  }
+
   function updateSyncButton() {
-    els.syncBtn.disabled = !state.selected || state.syncing || state.documents.length === 0;
-    els.syncBtn.textContent = state.syncing ? 'Sending…' : 'Send files to SharePoint';
+    const busy = state.syncing || state.syncingAll;
+    els.syncBtn.disabled = !state.selected || busy || state.documents.length === 0;
+    setButtonLoading(
+      els.syncBtnSpinner,
+      els.syncBtnLabel,
+      state.syncing,
+      'Send files to SharePoint',
+      'Sending…'
+    );
+  }
+
+  function updateSyncAllControls() {
+    const count = state.paging.loadedTo;
+    const ready = state.paging.allLoaded && count > 0;
+    const busy = state.syncing || state.syncingAll;
+    const paused = state.syncingAll && state.syncAll.paused;
+
+    els.syncAllBtn.disabled = !ready || busy;
+    setButtonLoading(
+      els.syncAllBtnSpinner,
+      els.syncAllBtnLabel,
+      state.syncingAll && !paused,
+      `Send all (${count}) projects files to SharePoint`,
+      `Sending all (${count}) projects…`
+    );
+
+    els.pauseSyncAllBtn.disabled = !state.syncingAll || paused;
+    els.resumeSyncAllBtn.disabled = !state.syncingAll || !paused;
+
+    if (state.syncingAll && paused) {
+      els.syncAllHint.textContent = state.syncAll.currentProjectName
+        ? `Paused after current project finishes (now: ${state.syncAll.currentProjectName}). Click Resume to continue.`
+        : 'Paused. Click Resume to continue.';
+    } else if (state.syncingAll) {
+      els.syncAllHint.textContent = state.syncAll.currentProjectName
+        ? `Currently syncing: ${state.syncAll.currentProjectName}`
+        : 'Sending all projects…';
+    } else if (!state.paging.allLoaded) {
+      els.syncAllHint.textContent = `Waiting until all projects finish loading… (${count} fetched so far)`;
+    } else if (count === 0) {
+      els.syncAllHint.textContent = 'No projects available to sync.';
+    } else {
+      els.syncAllHint.textContent = `Ready to sync ${count} project(s).`;
+    }
+  }
+
+  function updateSyncAllButton() {
+    updateSyncAllControls();
+  }
+
+  async function waitIfPaused() {
+    if (!state.syncAll.paused) return;
+
+    addSyncAllHistory('Paused — waiting for Resume…', 'info');
+    updateSyncAllControls();
+    updateSyncAllProgressUi();
+
+    await new Promise((resolve) => {
+      state.syncAll.pauseResolver = resolve;
+    });
+    state.syncAll.pauseResolver = null;
+  }
+
+  function pauseSyncAll() {
+    if (!state.syncingAll || state.syncAll.paused) return;
+    state.syncAll.paused = true;
+    addSyncAllHistory(
+      'Pause requested — current project will finish, then sync waits.',
+      'info'
+    );
+    updateSyncAllControls();
+    updateSyncAllProgressUi();
+  }
+
+  function resumeSyncAll() {
+    if (!state.syncingAll || !state.syncAll.paused) return;
+    state.syncAll.paused = false;
+    addSyncAllHistory('Resumed sync.', 'info');
+    if (state.syncAll.pauseResolver) {
+      state.syncAll.pauseResolver();
+    }
+    updateSyncAllControls();
+    updateSyncAllProgressUi();
   }
 
   function updateProjectsPager() {
@@ -79,8 +215,10 @@
     const end = state.paging.offset + state.projects.length;
     els.projectsPageInfo.textContent =
       state.projects.length === 0 ? '0-0' : `${start}-${end}`;
-    els.prevProjectsBtn.disabled = state.paging.loading || state.paging.offset === 0;
-    els.nextProjectsBtn.disabled = state.paging.loading || !canGoNextPage();
+    els.prevProjectsBtn.disabled =
+      state.paging.loading || state.syncingAll || state.paging.offset === 0;
+    els.nextProjectsBtn.disabled =
+      state.paging.loading || state.syncingAll || !canGoNextPage();
   }
 
   function updateProjectsLoadIndicator() {
@@ -103,6 +241,8 @@
       els.projectsTotal.classList.add('hidden');
       els.projectsTotal.textContent = '';
     }
+
+    updateSyncAllButton();
   }
 
   function renderProjects() {
@@ -141,7 +281,7 @@
 
     els.projectsList.querySelectorAll('button[data-id]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (state.syncing) return;
+        if (state.syncing || state.syncingAll) return;
         const project = state.projects.find(
           (item) => String(item.projectId) === String(button.dataset.id)
         );
@@ -389,6 +529,43 @@
     els.resultList.prepend(li);
   }
 
+  function updateSyncAllProgressUi() {
+    const { projectsTotal, projectsDone, filesOk, filesFail, currentProjectName, paused } =
+      state.syncAll;
+    const percent =
+      projectsTotal === 0 ? 100 : Math.round((projectsDone / projectsTotal) * 100);
+
+    els.syncAllProjectsDone.textContent = String(projectsDone);
+    els.syncAllProjectsTotal.textContent = String(projectsTotal);
+    els.syncAllFilesOk.textContent = String(filesOk);
+    els.syncAllFilesFail.textContent = String(filesFail);
+    els.syncAllProgressBar.style.width = `${percent}%`;
+    els.syncAllProgressPercent.textContent = `${percent}%`;
+
+    if (state.syncingAll && paused) {
+      els.syncAllProgressText.textContent = `Paused · ${projectsDone} / ${projectsTotal} projects`;
+    } else if (state.syncingAll && currentProjectName) {
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects · ${currentProjectName}`;
+    } else if (state.syncingAll) {
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects`;
+    } else {
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects done`;
+    }
+  }
+
+  function addSyncAllHistory(message, type = 'info') {
+    const li = document.createElement('li');
+    const styles = {
+      success: 'rounded bg-green-50 px-2 py-1 text-green-800',
+      error: 'rounded bg-red-50 px-2 py-1 text-red-800',
+      info: 'rounded bg-gray-50 px-2 py-1 text-gray-700',
+    };
+    li.className = styles[type] || styles.info;
+    li.textContent = message;
+    els.syncAllResultList.appendChild(li);
+    els.syncAllResultList.scrollTop = els.syncAllResultList.scrollHeight;
+  }
+
   function readSseStream(response, onEvent) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -425,11 +602,77 @@
     })();
   }
 
+  async function syncProjectToSharePoint(project, handlers = {}) {
+    const {
+      onStarted,
+      onFileSuccess,
+      onFileError,
+      onComplete,
+      onError,
+      onStatus,
+    } = handlers;
+
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(project.projectId)}/sync`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectName: project.projectName }),
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `Sync failed (${response.status})`);
+    }
+
+    let summary = {
+      succeeded: 0,
+      failed: 0,
+      total: 0,
+      success: false,
+      fatalError: null,
+    };
+
+    await readSseStream(response, (event, data) => {
+      if (event === 'status' && onStatus) onStatus(data);
+      if (event === 'started') {
+        summary.total = data.total || 0;
+        if (onStarted) onStarted(data);
+      }
+      if (event === 'file-success' && onFileSuccess) onFileSuccess(data);
+      if (event === 'file-error' && onFileError) onFileError(data);
+      if (event === 'complete') {
+        summary = {
+          succeeded: data.succeeded || 0,
+          failed: data.failed || 0,
+          total: data.total || 0,
+          success: Boolean(data.success),
+          fatalError: null,
+        };
+        if (onComplete) onComplete(data);
+      }
+      if (event === 'error') {
+        summary.fatalError = data.error || 'Sync failed';
+        if (onError) onError(data);
+      }
+    });
+
+    if (summary.fatalError) {
+      throw new Error(summary.fatalError);
+    }
+
+    return summary;
+  }
+
   async function startSync() {
-    if (!state.selected || state.syncing || state.documents.length === 0) return;
+    if (!state.selected || state.syncing || state.syncingAll || state.documents.length === 0) {
+      return;
+    }
 
     state.syncing = true;
     updateSyncButton();
+    updateSyncAllButton();
     showError('');
 
     els.progressBox.classList.remove('hidden');
@@ -437,43 +680,23 @@
     updateUploadProgress(state.documents.length, 0, 0);
 
     try {
-      const response = await fetch(
-        `/api/projects/${encodeURIComponent(state.selected.projectId)}/sync`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectName: state.selected.projectName }),
-        }
-      );
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || `Sync failed (${response.status})`);
-      }
-
-      await readSseStream(response, (event, data) => {
-        if (event === 'started') {
-          updateUploadProgress(data.total || 0, 0, 0);
-        }
-
-        if (event === 'file-success') {
+      await syncProjectToSharePoint(state.selected, {
+        onStarted: (data) => updateUploadProgress(data.total || 0, 0, 0),
+        onFileSuccess: (data) => {
           addResult(data.filename, true);
           updateUploadProgress(data.total, data.succeeded, data.failed);
-        }
-
-        if (event === 'file-error') {
+        },
+        onFileError: (data) => {
           addResult(data.filename, false, data.error);
           updateUploadProgress(data.total, data.succeeded, data.failed);
-        }
-
-        if (event === 'complete') {
+        },
+        onComplete: (data) => {
           updateUploadProgress(data.total || 0, data.succeeded || 0, data.failed || 0);
-        }
-
-        if (event === 'error') {
+        },
+        onError: (data) => {
           setProgress(0, data.error || 'Sync failed');
           showError(data.error || 'Sync failed');
-        }
+        },
       });
     } catch (error) {
       setProgress(0, 'Error');
@@ -481,20 +704,114 @@
     } finally {
       state.syncing = false;
       updateSyncButton();
+      updateSyncAllButton();
       renderProjects();
     }
   }
 
+  async function startSyncAll() {
+    if (state.syncing || state.syncingAll || !state.paging.allLoaded) return;
+
+    const allProjects = getAllCachedProjects();
+    if (allProjects.length === 0) return;
+
+    state.syncingAll = true;
+    state.syncAll = {
+      projectsTotal: allProjects.length,
+      projectsDone: 0,
+      filesOk: 0,
+      filesFail: 0,
+      currentProjectName: '',
+      paused: false,
+      pauseResolver: null,
+    };
+
+    updateSyncButton();
+    updateSyncAllControls();
+    updateProjectsPager();
+    showError('');
+
+    els.syncAllProgressBox.classList.remove('hidden');
+    els.syncAllResultList.innerHTML = '';
+    updateSyncAllProgressUi();
+    addSyncAllHistory(`Starting sync for ${allProjects.length} project(s)…`, 'info');
+
+    for (const project of allProjects) {
+      await waitIfPaused();
+
+      state.syncAll.currentProjectName = project.projectName || `Project ${project.projectId}`;
+      updateSyncAllControls();
+      updateSyncAllProgressUi();
+      addSyncAllHistory(`▶ ${state.syncAll.currentProjectName}`, 'info');
+
+      try {
+        const summary = await syncProjectToSharePoint(project, {
+          onFileSuccess: (data) => {
+            state.syncAll.filesOk += 1;
+            updateSyncAllProgressUi();
+            addSyncAllHistory(
+              `  ✓ ${data.filename} (${project.projectName})`,
+              'success'
+            );
+          },
+          onFileError: (data) => {
+            state.syncAll.filesFail += 1;
+            updateSyncAllProgressUi();
+            addSyncAllHistory(
+              `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
+              'error'
+            );
+          },
+        });
+
+        state.syncAll.projectsDone += 1;
+        updateSyncAllProgressUi();
+        addSyncAllHistory(
+          `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
+          summary.failed > 0 ? 'error' : 'success'
+        );
+      } catch (error) {
+        state.syncAll.projectsDone += 1;
+        updateSyncAllProgressUi();
+        addSyncAllHistory(
+          `Failed project: ${project.projectName} — ${error.message}`,
+          'error'
+        );
+      }
+    }
+
+    state.syncAll.currentProjectName = '';
+    state.syncAll.paused = false;
+    if (state.syncAll.pauseResolver) {
+      state.syncAll.pauseResolver();
+      state.syncAll.pauseResolver = null;
+    }
+    state.syncingAll = false;
+    updateSyncButton();
+    updateSyncAllControls();
+    updateProjectsPager();
+    updateSyncAllProgressUi();
+    addSyncAllHistory(
+      `Finished all projects · ${state.syncAll.filesOk} files uploaded, ${state.syncAll.filesFail} failed`,
+      state.syncAll.filesFail > 0 ? 'error' : 'success'
+    );
+  }
+
   els.syncBtn.addEventListener('click', startSync);
+  els.syncAllBtn.addEventListener('click', startSyncAll);
+  els.pauseSyncAllBtn.addEventListener('click', pauseSyncAll);
+  els.resumeSyncAllBtn.addEventListener('click', resumeSyncAll);
   els.prevProjectsBtn.addEventListener('click', () => {
-    if (state.paging.loading) return;
+    if (state.paging.loading || state.syncingAll) return;
     const nextOffset = Math.max(0, state.paging.offset - state.paging.pageSize);
     loadProjects(nextOffset);
   });
   els.nextProjectsBtn.addEventListener('click', () => {
-    if (state.paging.loading || !canGoNextPage()) return;
+    if (state.paging.loading || state.syncingAll || !canGoNextPage()) return;
     const nextOffset = state.paging.offset + state.paging.pageSize;
     loadProjects(nextOffset);
   });
+
+  updateSyncAllControls();
   loadProjects();
 })();
