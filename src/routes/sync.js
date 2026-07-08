@@ -140,13 +140,15 @@ router.post('/projects/:projectId/sync', async (req, res) => {
         folderName: document.folderName,
       };
 
+      let localFilePath = null;
+
       sendSse(res, 'progress', {
         stage: 'downloading',
         current: completed + 1,
         total,
         percent: Math.round((completed / total) * 100),
         currentFile: item.filename,
-        message: `Downloading ${item.filename}…`,
+        message: `Preparing ${item.filename}…`,
         succeeded: results.succeeded.length,
         failed: results.failed.length,
       });
@@ -155,8 +157,11 @@ router.post('/projects/:projectId/sync', async (req, res) => {
         const download = await filevineService.downloadDocument(
           accessToken,
           document.documentId,
-          document.filename
+          document.filename,
+          projectId,
+          projectName
         );
+        localFilePath = download.filePath;
 
         sendSse(res, 'progress', {
           stage: 'uploading',
@@ -164,7 +169,9 @@ router.post('/projects/:projectId/sync', async (req, res) => {
           total,
           percent: Math.round((completed / total) * 100),
           currentFile: download.filename,
-          message: `Uploading ${download.filename} to SharePoint…`,
+          message: download.alreadyDownloaded
+            ? `Using local copy of ${download.filename}; uploading to SharePoint…`
+            : `Uploading ${download.filename} to SharePoint…`,
           succeeded: results.succeeded.length,
           failed: results.failed.length,
         });
@@ -176,20 +183,32 @@ router.post('/projects/:projectId/sync', async (req, res) => {
           download.mimeType
         );
 
+        filevineService.deleteLocalDownload(download.filePath);
+        localFilePath = null;
+
         const successItem = {
           ...item,
           filename: download.filename,
           sharePointPath: upload.sharePointPath,
           size: download.size,
+          reusedLocalFile: Boolean(download.alreadyDownloaded),
         };
         results.succeeded.push(successItem);
 
         sendSse(res, 'file-success', {
           ...successItem,
+          total,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
           message: `Uploaded ${download.filename}`,
         });
       } catch (error) {
         logError(`Sync failed for document ${document.documentId}`, error);
+
+        // Keep local file on failure so a later sync can retry without re-downloading.
+        if (localFilePath) {
+          log('Keeping local download after failed upload', { filePath: localFilePath });
+        }
 
         const failItem = {
           ...item,
@@ -199,6 +218,9 @@ router.post('/projects/:projectId/sync', async (req, res) => {
 
         sendSse(res, 'file-error', {
           ...failItem,
+          total,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
           message: `Failed: ${item.filename}`,
         });
       }
@@ -262,7 +284,9 @@ router.get('/test-sync', async (req, res) => {
     const download = await filevineService.downloadDocument(
       accessToken,
       document.documentId,
-      document.filename
+      document.filename,
+      projectId,
+      projectName
     );
 
     validatePowerAutomateEnv();
@@ -275,12 +299,15 @@ router.get('/test-sync', async (req, res) => {
         download.mimeType
       );
 
+      filevineService.deleteLocalDownload(download.filePath);
+
       const result = {
         success: true,
         projectName,
         filename: download.filename,
         uploaded: true,
         sharePointPath: upload.sharePointPath,
+        reusedLocalFile: Boolean(download.alreadyDownloaded),
       };
 
       log('Sync completed', result);

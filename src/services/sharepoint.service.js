@@ -18,8 +18,14 @@ async function uploadToSharePoint({ projectId, projectName, filename, contentTyp
   const sharePointPath = buildSharePointPath(projectName, filename);
   const fileContent = buffer.toString('base64');
 
+  // Power Automate HTTP trigger schema expects projectId as Integer (Express params are strings).
+  const numericProjectId = Number(projectId);
+  if (!Number.isInteger(numericProjectId)) {
+    throw new Error(`Invalid projectId for Power Automate upload: ${projectId}`);
+  }
+
   const payload = {
-    projectId,
+    projectId: numericProjectId,
     projectName,
     filename,
     contentType,

@@ -20,8 +20,23 @@ function buildAuthHeaders(accessToken) {
   };
 }
 
-function ensureDownloadsDir() {
-  const downloadsDir = path.join(process.cwd(), 'downloads');
+function sanitizeFolderName(name) {
+  return String(name || '')
+    .replace(/[~"#%&*:<>?/\\{|}]/g, '_')
+    .trim() || 'Unnamed Project';
+}
+
+function ensureDownloadsDir(projectId, projectName) {
+  const parts = [process.cwd(), 'downloads'];
+
+  if (projectId != null) {
+    const folderLabel = projectName
+      ? `${sanitizeFolderName(projectName)}_${projectId}`
+      : String(projectId);
+    parts.push(folderLabel);
+  }
+
+  const downloadsDir = path.join(...parts);
   if (!fs.existsSync(downloadsDir)) {
     fs.mkdirSync(downloadsDir, { recursive: true });
   }
@@ -346,9 +361,36 @@ async function getDownloadLink(accessToken, documentId) {
   }
 }
 
-async function downloadFromPresignedUrl(downloadLink, filename) {
+function getLocalDownloadPath(filename, projectId, projectName) {
   const safeName = path.basename(filename);
-  const filePath = path.join(ensureDownloadsDir(), safeName);
+  return {
+    safeName,
+    filePath: path.join(ensureDownloadsDir(projectId, projectName), safeName),
+  };
+}
+
+function getExistingDownload(filename, projectId, projectName) {
+  const { safeName, filePath } = getLocalDownloadPath(filename, projectId, projectName);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  const stats = fs.statSync(filePath);
+  if (!stats.isFile() || stats.size <= 0) {
+    return null;
+  }
+
+  return {
+    filePath,
+    filename: safeName,
+    size: stats.size,
+    mimeType: 'application/octet-stream',
+    alreadyDownloaded: true,
+  };
+}
+
+async function downloadFromPresignedUrl(downloadLink, filename, projectId, projectName) {
+  const { safeName, filePath } = getLocalDownloadPath(filename, projectId, projectName);
 
   try {
     const response = await axios.get(downloadLink, {
@@ -378,6 +420,7 @@ async function downloadFromPresignedUrl(downloadLink, filename) {
       filename: safeName,
       size: stats.size,
       mimeType,
+      alreadyDownloaded: false,
     };
   } catch (error) {
     logError('File download failed', error);
@@ -404,14 +447,38 @@ async function inspectDocumentMetadata(accessToken, documentId) {
   }
 }
 
-async function downloadDocument(accessToken, documentId, filename) {
+async function downloadDocument(accessToken, documentId, filename, projectId, projectName) {
+  const resolvedFilename = filename || 'document';
+
+  const existing = getExistingDownload(resolvedFilename, projectId, projectName);
+  if (existing) {
+    log('Skipping download; file already exists locally', {
+      filename: existing.filename,
+      savedPath: existing.filePath,
+      size: existing.size,
+      projectId,
+    });
+    return {
+      ...existing,
+      documentId,
+      downloadLink: null,
+      downloadLinkResponseFile: null,
+      batchResponse: null,
+    };
+  }
+
   const { downloadLink, savedTo, versionKey, batchResponse } = await getDownloadLink(
     accessToken,
     documentId
   );
 
-  const resolvedFilename = filename || versionKey || 'document';
-  const file = await downloadFromPresignedUrl(downloadLink, resolvedFilename);
+  const downloadFilename = filename || versionKey || 'document';
+  const file = await downloadFromPresignedUrl(
+    downloadLink,
+    downloadFilename,
+    projectId,
+    projectName
+  );
 
   return {
     ...file,
@@ -420,6 +487,16 @@ async function downloadDocument(accessToken, documentId, filename) {
     downloadLinkResponseFile: savedTo,
     batchResponse,
   };
+}
+
+function deleteLocalDownload(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return false;
+  }
+
+  fs.unlinkSync(filePath);
+  log('Deleted local download after successful upload', { filePath });
+  return true;
 }
 
 module.exports = {
@@ -432,5 +509,6 @@ module.exports = {
   getDownloadLink,
   downloadFromPresignedUrl,
   downloadDocument,
+  deleteLocalDownload,
   inspectDocumentMetadata,
 };

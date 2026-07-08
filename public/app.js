@@ -14,6 +14,7 @@
       pageCache: new Map(),
       inFlight: new Map(),
       prefetchRunning: false,
+      allLoaded: false,
     },
   };
 
@@ -22,6 +23,9 @@
   const els = {
     error: $('error'),
     projectsStatus: $('projects-status'),
+    projectsLoadingIndicator: $('projects-loading-indicator'),
+    projectsLoadingText: $('projects-loading-text'),
+    projectsTotal: $('projects-total'),
     projectsList: $('projects-list'),
     prevProjectsBtn: $('prev-projects-btn'),
     nextProjectsBtn: $('next-projects-btn'),
@@ -71,29 +75,47 @@
   }
 
   function updateProjectsPager() {
-    const page = Math.floor(state.paging.offset / state.paging.pageSize) + 1;
-    els.projectsPageInfo.textContent = `Page ${page}`;
+    const start = state.projects.length === 0 ? 0 : state.paging.offset + 1;
+    const end = state.paging.offset + state.projects.length;
+    els.projectsPageInfo.textContent =
+      state.projects.length === 0 ? '0-0' : `${start}-${end}`;
     els.prevProjectsBtn.disabled = state.paging.loading || state.paging.offset === 0;
     els.nextProjectsBtn.disabled = state.paging.loading || !canGoNextPage();
+  }
+
+  function updateProjectsLoadIndicator() {
+    const isLoadingProjects =
+      state.paging.loading || state.paging.prefetchRunning || state.paging.inFlight.size > 0;
+
+    if (isLoadingProjects) {
+      els.projectsLoadingIndicator.classList.remove('hidden');
+      els.projectsLoadingIndicator.classList.add('flex');
+      els.projectsLoadingText.textContent = `Loading projects... ${state.paging.loadedTo} fetched`;
+    } else {
+      els.projectsLoadingIndicator.classList.add('hidden');
+      els.projectsLoadingIndicator.classList.remove('flex');
+    }
+
+    if (state.paging.allLoaded) {
+      els.projectsTotal.classList.remove('hidden');
+      els.projectsTotal.textContent = `Total projects: ${state.paging.loadedTo}`;
+    } else {
+      els.projectsTotal.classList.add('hidden');
+      els.projectsTotal.textContent = '';
+    }
   }
 
   function renderProjects() {
     if (state.projects.length === 0) {
       els.projectsList.innerHTML = '';
-      els.projectsStatus.textContent = state.paging.offset === 0
-        ? 'Loaded 0 projects'
-        : `No projects on page ${Math.floor(state.paging.offset / state.paging.pageSize) + 1}.`;
+      els.projectsStatus.textContent = 'No projects on this page.';
+      updateProjectsLoadIndicator();
       updateProjectsPager();
       return;
     }
 
-    const start = state.paging.offset + 1;
-    const end = state.paging.offset + state.projects.length;
-    if (state.paging.hasMore || state.paging.loadedTo > end) {
-      els.projectsStatus.textContent = `Showing ${start}-${end} (loaded ${state.paging.loadedTo}+)`;
-    } else {
-      els.projectsStatus.textContent = `Showing ${start}-${end} (loaded ${state.paging.loadedTo})`;
-    }
+    els.projectsStatus.textContent = 'Select a project';
+    updateProjectsLoadIndicator();
     els.projectsList.innerHTML = state.projects
       .map((project) => {
         const selected =
@@ -218,6 +240,7 @@
       };
       state.paging.pageCache.set(normalizedOffset, page);
       state.paging.loadedTo = Math.max(state.paging.loadedTo, page.loadedTo);
+      updateProjectsLoadIndicator();
       return page;
     })();
 
@@ -230,8 +253,11 @@
   }
 
   async function prefetchRemainingPages() {
+    if (state.paging.allLoaded) return;
     if (state.paging.prefetchRunning) return;
     state.paging.prefetchRunning = true;
+    state.paging.allLoaded = false;
+    updateProjectsLoadIndicator();
 
     try {
       let offset = 0;
@@ -247,10 +273,13 @@
       if (state.projects.length > 0) {
         renderProjects();
       }
+      state.paging.allLoaded = true;
     } catch {
       // Background prefetch is best-effort; no UI interruption needed.
+      state.paging.allLoaded = false;
     } finally {
       state.paging.prefetchRunning = false;
+      updateProjectsLoadIndicator();
     }
   }
 
@@ -258,6 +287,7 @@
     showError('');
     state.paging.loading = true;
     state.paging.offset = Math.max(0, offset);
+    updateProjectsLoadIndicator();
     updateProjectsPager();
 
     const viewOffset = state.paging.offset;
@@ -285,6 +315,7 @@
       showError(error.message);
     } finally {
       state.paging.loading = false;
+      updateProjectsLoadIndicator();
       updateProjectsPager();
     }
   }
@@ -334,6 +365,17 @@
     els.statTotal.textContent = String(total);
     els.statOk.textContent = String(ok);
     els.statFail.textContent = String(fail);
+  }
+
+  function updateUploadProgress(total, ok, fail) {
+    const safeTotal = Number(total) || 0;
+    const uploaded = Number(ok) || 0;
+    const failed = Number(fail) || 0;
+    const percent =
+      safeTotal === 0 ? 100 : Math.round((uploaded / safeTotal) * 100);
+
+    setStats(safeTotal, uploaded, failed);
+    setProgress(percent, `${uploaded} / ${safeTotal} files`);
   }
 
   function addResult(filename, ok, detail) {
@@ -392,8 +434,7 @@
 
     els.progressBox.classList.remove('hidden');
     els.resultList.innerHTML = '';
-    setStats(state.documents.length, 0, 0);
-    setProgress(0, 'Starting…');
+    updateUploadProgress(state.documents.length, 0, 0);
 
     try {
       const response = await fetch(
@@ -411,31 +452,22 @@
       }
 
       await readSseStream(response, (event, data) => {
-        if (event === 'status') {
-          setProgress(2, data.message || 'Working…');
-        }
-
         if (event === 'started') {
-          setStats(data.total || 0, 0, 0);
-          setProgress(data.total === 0 ? 100 : 0, data.message || 'Found files');
-        }
-
-        if (event === 'progress') {
-          setStats(data.total || 0, data.succeeded || 0, data.failed || 0);
-          setProgress(data.percent || 0, data.message || 'Uploading…');
+          updateUploadProgress(data.total || 0, 0, 0);
         }
 
         if (event === 'file-success') {
           addResult(data.filename, true);
+          updateUploadProgress(data.total, data.succeeded, data.failed);
         }
 
         if (event === 'file-error') {
           addResult(data.filename, false, data.error);
+          updateUploadProgress(data.total, data.succeeded, data.failed);
         }
 
         if (event === 'complete') {
-          setStats(data.total || 0, data.succeeded || 0, data.failed || 0);
-          setProgress(100, data.message || 'Done');
+          updateUploadProgress(data.total || 0, data.succeeded || 0, data.failed || 0);
         }
 
         if (event === 'error') {
