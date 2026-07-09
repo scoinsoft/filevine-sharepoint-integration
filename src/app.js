@@ -2,7 +2,11 @@ const path = require('path');
 const express = require('express');
 const morgan = require('morgan');
 const { port, validateEnv } = require('./config/env');
+const authRoutes = require('./routes/auth');
+const settingsRoutes = require('./routes/settings');
+const scheduleRoutes = require('./routes/schedule');
 const syncRoutes = require('./routes/sync');
+const { requireAuth } = require('./middleware/requireAuth');
 
 validateEnv();
 
@@ -16,7 +20,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use('/api', syncRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/settings', requireAuth, settingsRoutes);
+app.use('/api/schedule', requireAuth, scheduleRoutes);
+app.use('/api', requireAuth, syncRoutes);
 
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
@@ -32,5 +39,4 @@ app.listen(port, () => {
   console.log(`UI:            http://localhost:${port}/`);
   console.log(`Projects API:  GET  http://localhost:${port}/api/projects`);
   console.log(`Sync stream:   POST http://localhost:${port}/api/projects/:id/sync`);
-  console.log(`Legacy test:   GET  http://localhost:${port}/api/test-sync`);
 });

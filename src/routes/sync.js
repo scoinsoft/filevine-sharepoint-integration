@@ -1,30 +1,27 @@
 const express = require('express');
-const path = require('path');
 const filevineService = require('../services/filevine.service');
-const sharepointService = require('../services/sharepoint.service');
-const { validatePowerAutomateEnv } = require('../config/env');
+const syncProjectService = require('../services/syncProject.service');
+const scheduleService = require('../services/schedule.service');
+const syncRunService = require('../services/syncRun.service');
 const { log, logError } = require('../utils/logger');
-const { Semaphore } = require('../utils/semaphore');
 
 const router = express.Router();
 
-function readPositiveIntEnv(name, fallback) {
-  const value = Number(process.env[name]);
-  if (!Number.isFinite(value) || value <= 0) {
-    return fallback;
-  }
-  return Math.floor(value);
-}
+function createSseSender(res) {
+  let clientClosed = false;
+  res.on('close', () => {
+    clientClosed = true;
+  });
 
-// Small files can run in parallel; large base64 uploads are memory-heavy.
-const SYNC_CONCURRENCY = readPositiveIntEnv('SYNC_CONCURRENCY', 6);
-const SYNC_LARGE_FILE_MB = readPositiveIntEnv('SYNC_LARGE_FILE_MB', 25);
-const SYNC_LARGE_FILE_CONCURRENCY = readPositiveIntEnv('SYNC_LARGE_FILE_CONCURRENCY', 1);
-const LARGE_FILE_BYTES = SYNC_LARGE_FILE_MB * 1024 * 1024;
-
-function sendSse(res, event, data) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
+  return (event, data) => {
+    if (clientClosed) return;
+    try {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      clientClosed = true;
+    }
+  };
 }
 
 function initSse(res) {
@@ -95,383 +92,50 @@ router.get('/projects/:projectId/documents', async (req, res) => {
   }
 });
 
+router.get('/sync/status', (req, res) => {
+  res.json({
+    success: true,
+    activeRuns: syncRunService.getActiveRuns(),
+    hasActiveRuns: syncRunService.hasActiveRuns(),
+  });
+});
+
 router.post('/projects/:projectId/sync', async (req, res) => {
   const { projectId } = req.params;
   const projectName =
     req.body?.projectName || req.query?.projectName || `Project ${projectId}`;
 
+  if (scheduleService.isUploadBlocked()) {
+    return res.status(423).json({
+      success: false,
+      error:
+        'Uploads are disabled while the scheduled sync is running. This usually takes about 2–3 hours.',
+    });
+  }
+
   initSse(res);
-
-  const results = {
-    succeeded: [],
-    failed: [],
-  };
-
-  let total = 0;
-  let completed = 0;
+  const sendSse = createSseSender(res);
+  syncRunService.startRun(projectId, projectName);
 
   try {
-    validatePowerAutomateEnv();
-    sendSse(res, 'status', {
-      stage: 'authenticating',
-      message: 'Connecting to Filevine…',
+    log('Manual project sync started', { projectId, projectName });
+    await syncProjectService.syncProject(projectId, projectName, {
+      onEvent: (event, data) => sendSse(event, data),
     });
-
-    const accessToken = await filevineService.authenticate();
-
-    sendSse(res, 'status', {
-      stage: 'listing',
-      message: `Loading documents for ${projectName}…`,
-      projectId,
-      projectName,
-    });
-
-    const documents = await filevineService.listDocuments(accessToken, projectId);
-    total = documents.length;
-
-    sendSse(res, 'started', {
-      projectId,
-      projectName,
-      total,
-      message: total === 0 ? 'No documents to sync' : `Found ${total} document(s)`,
-    });
-
-    if (total === 0) {
-      sendSse(res, 'complete', {
-        success: true,
-        projectId,
-        projectName,
-        total: 0,
-        succeeded: 0,
-        failed: 0,
-        results,
-      });
-      return res.end();
-    }
-
-    const manifest = filevineService.readProjectUploadManifest(projectId, projectName);
-    const uploadedDocumentIds = manifest.uploadedDocumentIds;
-    const uploadedFilenames = manifest.uploadedFilenames;
-
-    let nextIndex = 0;
-    const largeUploadGate = new Semaphore(SYNC_LARGE_FILE_CONCURRENCY);
-
-    async function uploadWithMemoryGuard(filePath, size, mimeType) {
-      const isLarge = Number(size) > LARGE_FILE_BYTES;
-      const runUpload = () =>
-        sharepointService.uploadFile(filePath, projectId, projectName, mimeType);
-
-      if (!isLarge) {
-        return runUpload();
-      }
-
-      log('Queueing large file upload', {
-        projectId,
-        filename: path.basename(filePath),
-        size,
-        largeFileMb: SYNC_LARGE_FILE_MB,
-        maxConcurrentLargeUploads: SYNC_LARGE_FILE_CONCURRENCY,
-      });
-      return largeUploadGate.run(runUpload);
-    }
-
-    async function processDocument(document) {
-      const item = {
-        documentId: document.documentId,
-        filename: document.filename,
-        folderName: document.folderName,
-      };
-      const documentKey = String(document.documentId);
-
-      if (uploadedDocumentIds.has(documentKey)) {
-        const skippedItem = {
-          ...item,
-          skippedAlreadyUploaded: true,
-        };
-        results.succeeded.push(skippedItem);
-        sendSse(res, 'file-success', {
-          ...skippedItem,
-          total,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-          message: `Skipped already uploaded: ${item.filename}`,
-        });
-
-        completed += 1;
-        sendSse(res, 'progress', {
-          stage: 'file-complete',
-          current: completed,
-          total,
-          percent: Math.round((completed / total) * 100),
-          currentFile: item.filename,
-          message: `Processed ${completed} of ${total}`,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-        });
-        return;
-      }
-
-      if (document.size && !sharepointService.isUploadableFileSize(document.size)) {
-        const failItem = {
-          ...item,
-          error: `File too large for base64 upload (${sharepointService.formatMegabytes(document.size)} MB). ` +
-            `Maximum supported is ${Math.round(sharepointService.getMaxUploadBytes() / (1024 * 1024))} MB.`,
-          skippedTooLarge: true,
-        };
-        results.failed.push(failItem);
-        sendSse(res, 'file-error', {
-          ...failItem,
-          total,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-          message: `Skipped too large: ${item.filename}`,
-        });
-
-        completed += 1;
-        sendSse(res, 'progress', {
-          stage: 'file-complete',
-          current: completed,
-          total,
-          percent: Math.round((completed / total) * 100),
-          currentFile: item.filename,
-          message: `Processed ${completed} of ${total}`,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-        });
-        return;
-      }
-
-      let localFilePath = null;
-
-      sendSse(res, 'progress', {
-        stage: 'downloading',
-        current: completed + 1,
-        total,
-        percent: Math.round((completed / total) * 100),
-        currentFile: item.filename,
-        message: `Preparing ${item.filename}…`,
-        succeeded: results.succeeded.length,
-        failed: results.failed.length,
-      });
-
-      try {
-        const download = await filevineService.downloadDocument(
-          accessToken,
-          document.documentId,
-          document.filename,
-          projectId,
-          projectName
-        );
-        localFilePath = download.filePath;
-
-        if (!sharepointService.isUploadableFileSize(download.size)) {
-          filevineService.deleteLocalDownload(download.filePath);
-          localFilePath = null;
-          throw new Error(
-            `File too large for base64 upload (${sharepointService.formatMegabytes(download.size)} MB). ` +
-              `Maximum supported is ${Math.round(sharepointService.getMaxUploadBytes() / (1024 * 1024))} MB.`
-          );
-        }
-
-        sendSse(res, 'progress', {
-          stage: 'uploading',
-          current: completed + 1,
-          total,
-          percent: Math.round((completed / total) * 100),
-          currentFile: download.filename,
-          message: download.alreadyDownloaded
-            ? `Using local copy of ${download.filename}; uploading to SharePoint…`
-            : `Uploading ${download.filename} to SharePoint…`,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-        });
-
-        const upload = await uploadWithMemoryGuard(
-          download.filePath,
-          download.size,
-          download.mimeType
-        );
-
-        filevineService.deleteLocalDownload(download.filePath);
-        localFilePath = null;
-
-        filevineService.recordProjectUploadSuccess(
-          projectId,
-          projectName,
-          document.documentId,
-          download.filename,
-          uploadedDocumentIds,
-          uploadedFilenames
-        );
-
-        const successItem = {
-          ...item,
-          filename: download.filename,
-          sharePointPath: upload.sharePointPath,
-          size: download.size,
-          reusedLocalFile: Boolean(download.alreadyDownloaded),
-        };
-        results.succeeded.push(successItem);
-
-        sendSse(res, 'file-success', {
-          ...successItem,
-          total,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-          message: `Uploaded ${download.filename}`,
-        });
-      } catch (error) {
-        logError(`Sync failed for document ${document.documentId}`, error);
-
-        // Keep local file on failure so a later sync can retry without re-downloading.
-        if (localFilePath) {
-          log('Keeping local download after failed upload', { filePath: localFilePath });
-        }
-
-        const failItem = {
-          ...item,
-          error: error.message,
-        };
-        results.failed.push(failItem);
-
-        sendSse(res, 'file-error', {
-          ...failItem,
-          total,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-          message: `Failed: ${item.filename}`,
-        });
-      }
-
-      completed += 1;
-      sendSse(res, 'progress', {
-        stage: 'file-complete',
-        current: completed,
-        total,
-        percent: Math.round((completed / total) * 100),
-        currentFile: item.filename,
-        message: `Processed ${completed} of ${total}`,
-        succeeded: results.succeeded.length,
-        failed: results.failed.length,
-      });
-    }
-
-    const workerCount = Math.min(SYNC_CONCURRENCY, total);
-    const workers = Array.from({ length: workerCount }, () =>
-      (async () => {
-        while (true) {
-          const currentIndex = nextIndex;
-          nextIndex += 1;
-          if (currentIndex >= documents.length) break;
-          await processDocument(documents[currentIndex]);
-        }
-      })()
-    );
-    await Promise.all(workers);
-
-    sendSse(res, 'complete', {
-      success: results.failed.length === 0,
-      projectId,
-      projectName,
-      total,
-      succeeded: results.succeeded.length,
-      failed: results.failed.length,
-      results,
-      message:
-        results.failed.length === 0
-          ? `All ${results.succeeded.length} file(s) uploaded successfully`
-          : `Finished with ${results.succeeded.length} success, ${results.failed.length} failed`,
-    });
-
+    log('Manual project sync finished', { projectId, projectName });
     res.end();
   } catch (error) {
     logError('Project sync failed', error);
-    sendSse(res, 'error', {
-      success: false,
-      projectId,
-      projectName,
-      error: error.message,
-      results,
-      total,
-      completed,
-    });
-    res.end();
-  }
-});
-
-router.get('/test-sync', async (req, res) => {
-  let projectName;
-  let projectId;
-  let filename;
-
-  try {
-    const accessToken = await filevineService.authenticate();
-
-    ({ projectId, projectName } = await filevineService.getProjects(accessToken));
-
-    const document = await filevineService.getDocuments(accessToken, projectId);
-    filename = document.filename;
-
-    const download = await filevineService.downloadDocument(
-      accessToken,
-      document.documentId,
-      document.filename,
-      projectId,
-      projectName
-    );
-
-    validatePowerAutomateEnv();
-
-    try {
-      const upload = await sharepointService.uploadFile(
-        download.filePath,
-        projectId,
-        projectName,
-        download.mimeType
-      );
-
-      filevineService.deleteLocalDownload(download.filePath);
-
-      const result = {
-        success: true,
-        projectName,
-        filename: download.filename,
-        uploaded: true,
-        sharePointPath: upload.sharePointPath,
-        reusedLocalFile: Boolean(download.alreadyDownloaded),
-      };
-
-      log('Sync completed', result);
-      return res.json(result);
-    } catch (uploadError) {
-      logError('SharePoint upload failed (sync continued)', uploadError);
-
-      const sharePointPath = sharepointService.buildSharePointPath(
-        projectName,
-        download.filename
-      );
-
-      return res.json({
+    if (!res.headersSent) {
+      res.status(500).json({
         success: false,
-        projectName,
-        filename: download.filename,
-        uploaded: false,
-        sharePointPath,
-        error: uploadError.message,
-        downloaded: true,
-        savedPath: download.filePath,
+        error: error.message,
       });
+      return;
     }
-  } catch (error) {
-    logError('Sync failed', error);
-    res.status(500).json({
-      success: false,
-      projectName: projectName || null,
-      filename: filename || null,
-      uploaded: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-    });
+    res.end();
+  } finally {
+    syncRunService.endRun(projectId);
   }
 });
 

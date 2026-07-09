@@ -202,24 +202,6 @@ async function fetchAllPages(client, endpoint, label) {
   return collected;
 }
 
-async function listProjects(accessToken) {
-  const client = getApiClient(accessToken);
-
-  try {
-    const items = await fetchAllPages(client, '/projects', 'Projects');
-    log(`Projects count: ${items.length}`);
-
-    const projects = items
-      .map(normalizeProject)
-      .filter((project) => project.projectId != null);
-
-    return projects;
-  } catch (error) {
-    logError('Failed to list projects', error);
-    throw formatAxiosError('Failed to list projects', error);
-  }
-}
-
 async function listProjectsPage(accessToken, options = {}) {
   const client = getApiClient(accessToken);
   const offset = Math.max(0, Number(options.offset) || 0);
@@ -275,35 +257,6 @@ async function listProjectsPage(accessToken, options = {}) {
   }
 }
 
-async function getProjects(accessToken) {
-  try {
-    const projects = await listProjects(accessToken);
-
-    if (projects.length === 0) {
-      throw new Error('No projects returned from Filevine');
-    }
-
-    const project = projects[0];
-    log('Project selected', {
-      projectName: project.projectName,
-      projectId: project.projectId,
-    });
-    console.log('Project Name:', project.projectName);
-    console.log('Project ID:', project.projectId);
-
-    return {
-      projectId: project.projectId,
-      projectName: project.projectName,
-      raw: project.raw,
-    };
-  } catch (error) {
-    if (error.message?.includes('No projects')) {
-      throw error;
-    }
-    throw error;
-  }
-}
-
 async function listDocuments(accessToken, projectId) {
   const client = getApiClient(accessToken);
 
@@ -321,37 +274,6 @@ async function listDocuments(accessToken, projectId) {
   } catch (error) {
     logError('Failed to list documents', error);
     throw formatAxiosError(`Failed to list documents for project ${projectId}`, error);
-  }
-}
-
-async function getDocuments(accessToken, projectId) {
-  try {
-    const documents = await listDocuments(accessToken, projectId);
-
-    if (documents.length === 0) {
-      throw new Error(`No documents found for project ${projectId}`);
-    }
-
-    const document = documents[0];
-    log('Document selected', {
-      filename: document.filename,
-      documentId: document.documentId,
-      folderName: document.folderName,
-    });
-    console.log('Filename:', document.filename);
-    console.log('DocumentId:', document.documentId);
-
-    return {
-      documentId: document.documentId,
-      filename: document.filename,
-      folderName: document.folderName,
-      raw: document.raw,
-    };
-  } catch (error) {
-    if (error.message?.includes('No documents')) {
-      throw error;
-    }
-    throw error;
   }
 }
 
@@ -625,13 +547,16 @@ function deleteLocalDownload(filePath) {
   return true;
 }
 
+function clearCachedToken() {
+  cachedToken = null;
+}
+
 module.exports = {
   authenticate,
+  clearCachedToken,
+  getProjectFolderLabel,
   listProjectsPage,
-  listProjects,
-  getProjects,
   listDocuments,
-  getDocuments,
   getDownloadLink,
   downloadFromPresignedUrl,
   downloadDocument,

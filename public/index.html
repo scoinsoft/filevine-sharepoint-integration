@@ -3,74 +3,462 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Filevine → SharePoint</title>
+    <title>Filevine Projects to SharePoint</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .panel-list::-webkit-scrollbar { width: 6px; }
+      .panel-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+      .nav-btn {
+        min-height: 2.5rem;
+      }
+      .nav-btn-active {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+      }
+      .schedule-status-bar {
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+      }
+      .schedule-status-bar:hover {
+        background-color: #dbeafe;
+        border-color: #93c5fd;
+      }
+      .path-mono {
+        word-break: break-all;
+      }
+    </style>
   </head>
   <body class="bg-gray-100 text-gray-900">
-    <div class="mx-auto max-w-5xl p-6">
-      <h1 class="mb-6 text-2xl font-bold">Filevine → SharePoint</h1>
+    <!-- Login -->
+    <div id="login-view" class="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center p-4 sm:p-6">
+      <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <h1 class="mb-1 text-xl font-bold sm:text-2xl">Filevine Projects to SharePoint</h1>
+        <p class="mb-4 text-sm text-gray-500">Sync files from each Filevine project to <span class="path-mono font-mono text-xs">Documents/Filevine/[Project Name]</span> in SharePoint.</p>
+        <p class="mb-6 text-sm text-gray-500">Sign in to use this automation tool. Only one user can be signed in at a time.</p>
 
-      <div id="error" class="mb-4 hidden rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
-      <div id="pause-notice" class="mb-4 hidden rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+        <div id="login-error" class="mb-4 hidden rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
 
-      <div class="grid gap-4 md:grid-cols-2">
-        <!-- Projects -->
-        <section class="rounded border border-gray-200 bg-white p-4">
-          <h2 class="mb-3 font-semibold">Projects</h2>
-          <p id="projects-status" class="mb-3 text-sm text-gray-500">Loading projects…</p>
-          <div id="projects-loading-indicator" class="mb-2 hidden items-center gap-2 text-xs text-gray-500">
-            <svg class="h-4 w-4 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <form id="login-form" class="space-y-4">
+          <div>
+            <label for="login-username" class="mb-1 block text-sm font-medium text-gray-700">Username</label>
+            <input
+              id="login-username"
+              name="username"
+              type="text"
+              required
+              autocomplete="username"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="login-password" class="mb-1 block text-sm font-medium text-gray-700">Password</label>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            id="login-btn"
+            type="submit"
+            class="flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            <svg id="login-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
             </svg>
-            <span id="projects-loading-text">Loading projects...</span>
+            <svg id="login-btn-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+            </svg>
+            <span id="login-btn-label">Sign in</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Session conflict modal -->
+    <div id="session-conflict-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+      <div class="w-full max-w-md rounded border border-amber-300 bg-white p-4 shadow-lg sm:p-6">
+        <h2 class="mb-2 text-lg font-semibold text-amber-900">Another user is logged in</h2>
+        <p id="session-conflict-text" class="mb-6 text-sm text-gray-600">
+          Another user is already signed in. Only one user can use this automation tool at a time. Would you like to sign them out and continue?
+        </p>
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            id="session-conflict-cancel"
+            type="button"
+            class="w-full rounded border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 sm:w-auto"
+          >
+            Cancel
+          </button>
+          <button
+            id="session-conflict-confirm"
+            type="button"
+            class="inline-flex w-full items-center justify-center gap-1.5 rounded bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 sm:w-auto"
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v1" />
+            </svg>
+            Yes, log them out
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+      <div class="flex max-h-[90vh] w-full max-w-2xl flex-col rounded border border-gray-200 bg-white shadow-lg">
+        <div class="border-b border-gray-200 px-4 py-4 sm:px-6">
+          <h2 class="text-lg font-semibold">Settings</h2>
+          <p class="mt-1 text-sm text-gray-500">Configure integration secrets used by this automation tool.</p>
+        </div>
+
+        <form id="settings-form" class="overflow-y-auto px-4 py-4 sm:px-6">
+          <div id="settings-error" class="mb-4 hidden rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
+          <div id="settings-success" class="mb-4 hidden rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700"></div>
+
+          <div class="space-y-4">
+            <div>
+              <label for="settings-filevine-client-id" class="mb-1 block text-sm font-medium text-gray-700">Filevine Client ID</label>
+              <input id="settings-filevine-client-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-filevine-client-secret" class="mb-1 block text-sm font-medium text-gray-700">Filevine Client Secret</label>
+              <input id="settings-filevine-client-secret" type="password" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-filevine-pat" class="mb-1 block text-sm font-medium text-gray-700">Filevine PAT</label>
+              <input id="settings-filevine-pat" type="password" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="settings-filevine-org-id" class="mb-1 block text-sm font-medium text-gray-700">Filevine Org ID</label>
+                <input id="settings-filevine-org-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label for="settings-filevine-user-id" class="mb-1 block text-sm font-medium text-gray-700">Filevine User ID</label>
+                <input id="settings-filevine-user-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div>
+              <label for="settings-power-automate-upload-url" class="mb-1 block text-sm font-medium text-gray-700">Power Automate Upload URL</label>
+              <input id="settings-power-automate-upload-url" type="url" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-filevine-token-url" class="mb-1 block text-sm font-medium text-gray-700">Filevine Token URL</label>
+              <input id="settings-filevine-token-url" type="text" disabled class="w-full rounded border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600" />
+            </div>
+            <div>
+              <label for="settings-filevine-api" class="mb-1 block text-sm font-medium text-gray-700">Filevine API</label>
+              <input id="settings-filevine-api" type="text" disabled class="w-full rounded border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600" />
+            </div>
           </div>
-          <p id="projects-total" class="mb-2 hidden text-xs font-medium text-green-700"></p>
-          <ul id="projects-list" class="max-h-96 space-y-1 overflow-y-auto"></ul>
-          <div class="mt-3 flex items-center justify-between gap-2">
+        </form>
+
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <button
+            id="settings-cancel-btn"
+            type="button"
+            class="w-full rounded border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 sm:w-auto"
+          >
+            Cancel
+          </button>
+          <button
+            id="settings-save-btn"
+            type="submit"
+            form="settings-form"
+            class="inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 sm:w-auto"
+          >
+            <svg id="settings-save-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <svg id="settings-save-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span id="settings-save-label">Save settings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Schedule modal -->
+    <div id="schedule-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+      <div class="flex max-h-[90vh] w-full max-w-lg flex-col rounded border border-gray-200 bg-white shadow-lg">
+        <div class="border-b border-gray-200 px-4 py-4 sm:px-6">
+          <h2 class="text-lg font-semibold">Schedule</h2>
+          <p class="mt-1 text-sm text-gray-500">Automatically sync all projects on a daily or weekly schedule.</p>
+        </div>
+
+        <form id="schedule-form" class="overflow-y-auto px-4 py-4 sm:px-6">
+          <div id="schedule-error" class="mb-4 hidden rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
+          <div id="schedule-success" class="mb-4 hidden rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700"></div>
+
+          <div class="mb-4 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            When a scheduled sync starts, it typically takes about <strong>2–3 hours</strong> to finish. During that time, manual uploads are disabled — you won't be able to use <strong>Send project files to SharePoint</strong> or <strong>Sync all to SharePoint</strong>.
+          </div>
+
+          <label class="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">
+            <input id="schedule-enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            Enable scheduled sync
+          </label>
+
+          <div class="mb-4">
+            <span class="mb-2 block text-sm font-medium text-gray-700">Frequency</span>
+            <div class="flex gap-4 text-sm">
+              <label class="inline-flex items-center gap-2">
+                <input id="schedule-frequency-daily" name="schedule-frequency" type="radio" value="daily" class="text-blue-600 focus:ring-blue-500" checked />
+                Daily
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input id="schedule-frequency-weekly" name="schedule-frequency" type="radio" value="weekly" class="text-blue-600 focus:ring-blue-500" />
+                Weekly
+              </label>
+            </div>
+          </div>
+
+          <div id="schedule-day-wrap" class="mb-4 hidden">
+            <label for="schedule-day" class="mb-1 block text-sm font-medium text-gray-700">Day of week</label>
+            <select id="schedule-day" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"></select>
+          </div>
+
+          <div class="mb-4">
+            <label for="schedule-time" class="mb-1 block text-sm font-medium text-gray-700">Time</label>
+            <input id="schedule-time" type="time" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          </div>
+
+          <div class="mb-4">
+            <label for="schedule-timezone" class="mb-1 block text-sm font-medium text-gray-700">Timezone</label>
+            <select id="schedule-timezone" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"></select>
+            <p id="schedule-timezone-hint" class="mt-1 text-xs text-gray-500">Defaults to the server system timezone. The schedule runs at the selected time in this timezone.</p>
+          </div>
+
+          <div class="rounded border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+            <p class="font-medium text-gray-900">Current schedule</p>
+            <p id="schedule-summary" class="mt-1 text-gray-600">Not scheduled</p>
+          </div>
+        </form>
+
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+          <button id="schedule-cancel-btn" type="button" class="w-full rounded border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 sm:w-auto">Cancel</button>
+          <button id="schedule-save-btn" type="submit" form="schedule-form" class="inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 sm:w-auto">
+            <svg id="schedule-save-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <svg id="schedule-save-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span id="schedule-save-label">Save schedule</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work page -->
+    <div id="work-view" class="mx-auto hidden w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
+      <header class="mb-4 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm sm:mb-6">
+        <div class="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+          <div class="min-w-0 flex-1">
+            <h1 class="text-xl font-bold leading-tight text-gray-900 sm:text-2xl">Filevine Projects to SharePoint</h1>
+            <p class="mt-1.5 text-sm leading-relaxed text-gray-500">
+              Sync files from each Filevine project to
+              <span class="path-mono font-mono text-xs text-gray-600">Documents/Filevine/[Project Name]</span>
+              in SharePoint.
+            </p>
+          </div>
+
+          <div class="flex w-full shrink-0 flex-col gap-3 lg:w-auto lg:min-w-[20rem]">
+            <div class="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+              <span
+                id="logged-in-user"
+                class="inline-flex max-w-full items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600"
+              >
+                <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span id="logged-in-user-name" class="truncate">Signed in</span>
+              </span>
+
+              <nav class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+                <button
+                  id="schedule-btn"
+                  type="button"
+                  class="nav-btn inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium text-gray-700 hover:bg-white hover:shadow-sm sm:text-sm"
+                >
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span class="hidden sm:inline">Schedule</span>
+                </button>
+                <button
+                  id="settings-btn"
+                  type="button"
+                  class="nav-btn inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium text-gray-700 hover:bg-white hover:shadow-sm sm:text-sm"
+                >
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span class="hidden sm:inline">Settings</span>
+                </button>
+                <button
+                  id="logout-btn"
+                  type="button"
+                  class="nav-btn inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium text-gray-700 hover:bg-white hover:shadow-sm sm:text-sm"
+                >
+                  <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v1" />
+                  </svg>
+                  <span class="hidden sm:inline">Log out</span>
+                </button>
+              </nav>
+            </div>
+
             <button
-              id="prev-projects-btn"
+              id="schedule-status-bar"
               type="button"
-              class="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              class="schedule-status-bar hidden w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-left sm:px-4"
+              title=""
             >
-              Previous
+              <div class="flex items-center gap-3">
+                <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-[11px] font-semibold uppercase tracking-wide text-blue-600">Active schedule</span>
+                  <span id="schedule-status-summary" class="block truncate text-sm font-semibold text-blue-950"></span>
+                  <span id="schedule-status-meta" class="block truncate text-xs text-blue-700"></span>
+                </span>
+                <svg class="h-4 w-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
             </button>
-            <p id="projects-page-info" class="text-xs text-gray-500">0-0</p>
+          </div>
+        </div>
+      </header>
+
+      <div id="schedule-notice" class="mb-4 hidden rounded border border-blue-300 bg-blue-50 px-4 py-3 text-sm leading-relaxed text-blue-900 break-words"></div>
+      <div id="background-sync-notice" class="mb-4 hidden rounded border border-indigo-300 bg-indigo-50 px-4 py-3 text-sm leading-relaxed text-indigo-900 break-words"></div>
+
+      <div id="error" class="mb-4 hidden rounded border border-red-300 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-700 break-words"></div>
+      <div id="pause-notice" class="mb-4 hidden rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900 break-words"></div>
+
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <!-- Projects -->
+        <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <svg class="h-4 w-4 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <h2 class="text-sm font-semibold text-gray-900">Projects</h2>
+            </div>
             <button
-              id="next-projects-btn"
+              id="refresh-projects-btn"
               type="button"
-              class="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Refresh projects"
+              title="Refresh projects"
             >
-              Next
+              <svg id="refresh-projects-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
             </button>
+          </div>
+          <div class="p-3 sm:p-4">
+            <div id="projects-status" class="mb-3 flex min-w-0 items-center gap-2 text-sm text-gray-500">
+              <svg id="projects-status-spinner" class="hidden h-4 w-4 shrink-0 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span id="projects-status-text" class="min-w-0 break-words">Loading projects…</span>
+            </div>
+            <ul id="projects-list" class="panel-list max-h-[38vh] divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-100 sm:max-h-64 lg:max-h-80"></ul>
+            <div class="mt-3 flex items-center justify-between gap-2">
+              <button
+                id="prev-projects-btn"
+                type="button"
+                class="inline-flex min-h-[2.75rem] items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Prev
+              </button>
+              <p id="projects-page-info" class="text-xs text-gray-500">0-0</p>
+              <button
+                id="next-projects-btn"
+                type="button"
+                class="inline-flex min-h-[2.75rem] items-center gap-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
         </section>
 
-        <!-- Files + upload -->
-        <section class="rounded border border-gray-200 bg-white p-4">
-          <h2 class="mb-1 font-semibold">Files</h2>
-          <p id="files-status" class="mb-3 text-sm text-gray-500">Click a project to see its files.</p>
+        <!-- Files -->
+        <section class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div class="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <svg class="h-4 w-4 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h2 class="text-sm font-semibold text-gray-900">Files</h2>
+            </div>
+            <button
+              id="refresh-files-btn"
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Refresh files"
+              title="Refresh files"
+              disabled
+            >
+              <svg id="refresh-files-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+          <div class="p-3 sm:p-4">
+            <div id="files-status" class="mb-3 flex min-w-0 items-center gap-2 text-sm text-gray-500">
+              <svg id="files-status-spinner" class="hidden h-4 w-4 shrink-0 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span id="files-status-text" class="min-w-0 break-words">Select a project to view files</span>
+            </div>
+            <ul id="files-list" class="panel-list mb-4 max-h-[32vh] divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-100 text-sm sm:max-h-56 lg:max-h-64"></ul>
 
-          <ul id="files-list" class="mb-4 max-h-56 space-y-1 overflow-y-auto text-sm"></ul>
-
-          <button
-            id="sync-btn"
-            type="button"
-            disabled
-            class="flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
-            <svg id="sync-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-            </svg>
-            <span id="sync-btn-label">Send files to SharePoint</span>
-          </button>
+            <button
+              id="sync-btn"
+              type="button"
+              disabled
+              class="flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              <svg id="sync-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <svg id="sync-btn-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span id="sync-btn-label" class="text-center">Send project files to SharePoint</span>
+            </button>
 
           <!-- Single-project progress -->
           <div id="progress-box" class="mt-4 hidden">
-            <div class="mb-1 flex justify-between text-sm text-gray-600">
-              <span id="progress-text">Uploading…</span>
-              <span id="progress-percent">0%</span>
+            <div class="mb-1 flex min-w-0 justify-between gap-2 text-sm text-gray-600">
+              <span id="progress-text" class="min-w-0 truncate">Uploading…</span>
+              <span id="progress-percent" class="shrink-0">0%</span>
             </div>
             <div class="h-2 overflow-hidden rounded bg-gray-200">
               <div id="progress-bar" class="h-full w-0 bg-blue-600 transition-all"></div>
@@ -89,51 +477,69 @@
                 <div class="text-xs text-gray-500">Failed</div>
               </div>
             </div>
-            <ul id="result-list" class="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm"></ul>
+            <ul id="result-list" class="mt-3 max-h-40 space-y-1 overflow-y-auto break-words text-sm"></ul>
+          </div>
           </div>
         </section>
       </div>
 
-      <!-- Send all projects -->
-      <section class="mt-4 rounded border border-gray-200 bg-white p-4">
-        <div class="flex flex-col gap-2 sm:flex-row">
+      <!-- Sync all -->
+      <section class="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div class="border-b border-gray-100 bg-gray-50 px-4 py-3">
+          <h2 class="text-sm font-semibold text-gray-900">Sync all projects</h2>
+        </div>
+        <div class="p-3 sm:p-4">
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-row">
           <button
             id="sync-all-btn"
             type="button"
             disabled
-            class="flex flex-1 items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            class="flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
             <svg id="sync-all-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
             </svg>
-            <span id="sync-all-btn-label">Send all projects files to SharePoint</span>
+            <svg id="sync-all-btn-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span id="sync-all-btn-label" class="text-center">Sync all to SharePoint</span>
           </button>
           <button
             id="pause-sync-all-btn"
             type="button"
             disabled
-            class="rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            class="inline-flex min-h-[2.75rem] items-center justify-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1 lg:flex-none"
           >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+            </svg>
             Pause
           </button>
           <button
             id="resume-sync-all-btn"
             type="button"
             disabled
-            class="rounded border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+            class="inline-flex min-h-[2.75rem] items-center justify-center gap-1.5 rounded border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1 lg:flex-none"
           >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7L8 5z" />
+            </svg>
             Resume
           </button>
         </div>
-        <p id="sync-all-hint" class="mt-2 text-xs text-gray-500">
-          Waiting until all projects finish loading…
+        <p id="sync-all-hint" class="mt-2 flex items-center gap-2 text-xs text-gray-500">
+          <svg id="sync-all-hint-spinner" class="hidden h-3.5 w-3.5 shrink-0 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          <span id="sync-all-hint-text" class="min-w-0 break-words">Waiting until all projects finish loading…</span>
         </p>
 
         <div id="sync-all-progress-box" class="mt-4 hidden">
-          <div class="mb-1 flex justify-between text-sm text-gray-600">
-            <span id="sync-all-progress-text">Waiting…</span>
-            <span id="sync-all-progress-percent">0%</span>
+          <div class="mb-1 flex min-w-0 justify-between gap-2 text-sm text-gray-600">
+            <span id="sync-all-progress-text" class="min-w-0 truncate">Waiting…</span>
+            <span id="sync-all-progress-percent" class="shrink-0">0%</span>
           </div>
           <div class="h-2 overflow-hidden rounded bg-gray-200">
             <div id="sync-all-progress-bar" class="h-full w-0 bg-emerald-600 transition-all"></div>
@@ -158,7 +564,8 @@
             </div>
           </div>
 
-          <ul id="sync-all-result-list" class="mt-3 max-h-72 space-y-1 overflow-y-auto text-sm"></ul>
+          <ul id="sync-all-result-list" class="panel-list mt-3 max-h-[40vh] space-y-1 overflow-y-auto break-words text-sm sm:max-h-72"></ul>
+        </div>
         </div>
       </section>
     </div>
