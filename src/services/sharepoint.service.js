@@ -5,6 +5,7 @@ const { powerAutomate } = require('../config/env');
 const { log, logError } = require('../utils/logger');
 
 const DEFAULT_TIMEOUT_MS = 180000;
+const DEFAULT_MAX_UPLOAD_MB = 100;
 const MAX_RETRIES = 3;
 
 function sanitizeFolderName(name) {
@@ -22,6 +23,41 @@ function getUploadTimeoutMs() {
     return DEFAULT_TIMEOUT_MS;
   }
   return Math.floor(ms);
+}
+
+function getMaxUploadBytes() {
+  const mb = Number(process.env.POWER_AUTOMATE_MAX_UPLOAD_MB || DEFAULT_MAX_UPLOAD_MB);
+  if (!Number.isFinite(mb) || mb <= 0) {
+    return DEFAULT_MAX_UPLOAD_MB * 1024 * 1024;
+  }
+  return Math.floor(mb * 1024 * 1024);
+}
+
+function formatMegabytes(bytes) {
+  return (Number(bytes) / (1024 * 1024)).toFixed(1);
+}
+
+function buildFileTooLargeError(filename, sizeBytes) {
+  const maxBytes = getMaxUploadBytes();
+  const maxMb = Math.round(maxBytes / (1024 * 1024));
+  return new Error(
+    `File too large for base64 upload: ${filename} (${formatMegabytes(sizeBytes)} MB). ` +
+      `Maximum supported is ${maxMb} MB with current upload mode.`
+  );
+}
+
+function isUploadableFileSize(sizeBytes) {
+  const size = Number(sizeBytes);
+  if (!Number.isFinite(size) || size <= 0) {
+    return true;
+  }
+  return size <= getMaxUploadBytes();
+}
+
+function assertUploadableFileSize(filename, sizeBytes) {
+  if (!isUploadableFileSize(sizeBytes)) {
+    throw buildFileTooLargeError(filename, sizeBytes);
+  }
 }
 
 function isRetryableUploadError(error) {
@@ -42,6 +78,8 @@ async function uploadToSharePoint({ projectId, projectName, filename, contentTyp
   if (!buffer) {
     throw new Error(`Missing file buffer for upload: ${filename}`);
   }
+
+  assertUploadableFileSize(filename, buffer.length);
   const fileContent = buffer.toString('base64');
 
   // Power Automate HTTP trigger schema expects projectId as Integer (Express params are strings).
@@ -153,8 +191,11 @@ async function uploadToSharePoint({ projectId, projectName, filename, contentTyp
 }
 
 async function uploadFile(filePath, projectId, projectName, contentType) {
-  const buffer = fs.readFileSync(filePath);
   const filename = path.basename(filePath);
+  const stats = fs.statSync(filePath);
+  assertUploadableFileSize(filename, stats.size);
+
+  const buffer = fs.readFileSync(filePath);
 
   return uploadToSharePoint({
     projectId,
@@ -169,4 +210,7 @@ module.exports = {
   uploadToSharePoint,
   uploadFile,
   buildSharePointPath,
+  getMaxUploadBytes,
+  isUploadableFileSize,
+  formatMegabytes,
 };

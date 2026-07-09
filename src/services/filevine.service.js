@@ -26,13 +26,19 @@ function sanitizeFolderName(name) {
     .trim() || 'Unnamed Project';
 }
 
+function getProjectFolderLabel(projectId, projectName) {
+  if (projectId == null) {
+    return null;
+  }
+  return projectName
+    ? `${sanitizeFolderName(projectName)}_${projectId}`
+    : String(projectId);
+}
+
 function ensureDownloadsDir(projectId, projectName) {
   const parts = [process.cwd(), 'downloads'];
-
-  if (projectId != null) {
-    const folderLabel = projectName
-      ? `${sanitizeFolderName(projectName)}_${projectId}`
-      : String(projectId);
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (folderLabel) {
     parts.push(folderLabel);
   }
 
@@ -41,6 +47,39 @@ function ensureDownloadsDir(projectId, projectName) {
     fs.mkdirSync(downloadsDir, { recursive: true });
   }
   return downloadsDir;
+}
+
+function ensureUploadHistoryDir(projectId, projectName) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for upload history path');
+  }
+
+  const historyDir = path.join(process.cwd(), 'upload_history', folderLabel);
+  if (!fs.existsSync(historyDir)) {
+    fs.mkdirSync(historyDir, { recursive: true });
+  }
+  return historyDir;
+}
+
+function getLegacyUploadManifestPath(projectId, projectName) {
+  return path.join(ensureDownloadsDir(projectId, projectName), 'uploaded-success.json');
+}
+
+function migrateLegacyUploadManifest(projectId, projectName, manifestPath) {
+  const legacyPath = getLegacyUploadManifestPath(projectId, projectName);
+  if (fs.existsSync(manifestPath) || !fs.existsSync(legacyPath)) {
+    return;
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.copyFileSync(legacyPath, manifestPath);
+    fs.unlinkSync(legacyPath);
+    log('Migrated upload manifest to upload_history', { from: legacyPath, to: manifestPath });
+  } catch (error) {
+    logError('Failed to migrate legacy upload manifest', error);
+  }
 }
 
 function formatAxiosError(context, error) {
@@ -327,9 +366,17 @@ async function getDownloadLink(accessToken, documentId) {
 
     log('Batch download link response', response.data);
 
-    ensureDownloadsDir();
-    fs.writeFileSync(DOWNLOAD_LINK_RESPONSE_FILE, JSON.stringify(response.data, null, 2), 'utf8');
-    log(`Saved batch download response to ${DOWNLOAD_LINK_RESPONSE_FILE}`);
+    try {
+      ensureDownloadsDir();
+      fs.writeFileSync(DOWNLOAD_LINK_RESPONSE_FILE, JSON.stringify(response.data, null, 2), 'utf8');
+      log(`Saved batch download response to ${DOWNLOAD_LINK_RESPONSE_FILE}`);
+    } catch (error) {
+      if (error.code === 'ENOSPC') {
+        logError('Skipped saving batch download debug file (disk full)', error);
+      } else {
+        throw error;
+      }
+    }
 
     const items = Array.isArray(response.data) ? response.data : [];
     if (items.length === 0) {
@@ -367,6 +414,85 @@ function getLocalDownloadPath(filename, projectId, projectName) {
     safeName,
     filePath: path.join(ensureDownloadsDir(projectId, projectName), safeName),
   };
+}
+
+function getProjectUploadManifestPath(projectId, projectName) {
+  return path.join(
+    ensureUploadHistoryDir(projectId, projectName),
+    'uploaded-success.json'
+  );
+}
+
+function readProjectUploadManifest(projectId, projectName) {
+  const manifestPath = getProjectUploadManifestPath(projectId, projectName);
+  migrateLegacyUploadManifest(projectId, projectName, manifestPath);
+
+  if (!fs.existsSync(manifestPath)) {
+    return {
+      manifestPath,
+      uploadedDocumentIds: new Set(),
+      uploadedFilenames: new Set(),
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(manifestPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const ids = Array.isArray(parsed?.uploadedDocumentIds) ? parsed.uploadedDocumentIds : [];
+    const names = Array.isArray(parsed?.uploadedFilenames) ? parsed.uploadedFilenames : [];
+    return {
+      manifestPath,
+      uploadedDocumentIds: new Set(ids.map((id) => String(id))),
+      uploadedFilenames: new Set(names.map((name) => String(name))),
+    };
+  } catch (error) {
+    logError('Failed to read upload manifest (starting fresh)', error);
+    return {
+      manifestPath,
+      uploadedDocumentIds: new Set(),
+      uploadedFilenames: new Set(),
+    };
+  }
+}
+
+let manifestWriteChain = Promise.resolve();
+
+function recordProjectUploadSuccess(
+  projectId,
+  projectName,
+  documentId,
+  filename,
+  uploadedDocumentIds,
+  uploadedFilenames
+) {
+  manifestWriteChain = manifestWriteChain
+    .then(() => {
+      const manifestPath = getProjectUploadManifestPath(projectId, projectName);
+      const documentKey = String(documentId);
+      const fileKey = String(filename || '');
+
+      uploadedDocumentIds.add(documentKey);
+      if (fileKey) {
+        uploadedFilenames.add(fileKey);
+      }
+
+      const payload = {
+        projectId: String(projectId),
+        projectName,
+        updatedAt: new Date().toISOString(),
+        uploadedDocumentIds: [...uploadedDocumentIds],
+        uploadedFilenames: [...uploadedFilenames],
+      };
+
+      fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
+      return manifestPath;
+    })
+    .catch((error) => {
+      logError('Failed to write upload manifest (upload still counted in this run)', error);
+      return null;
+    });
+
+  return manifestWriteChain;
 }
 
 function getExistingDownload(filename, projectId, projectName) {
@@ -510,5 +636,7 @@ module.exports = {
   downloadFromPresignedUrl,
   downloadDocument,
   deleteLocalDownload,
+  readProjectUploadManifest,
+  recordProjectUploadSuccess,
   inspectDocumentMetadata,
 };

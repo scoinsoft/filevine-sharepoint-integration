@@ -4,8 +4,8 @@
   "description": "Proof-of-concept: sync one Filevine document to SharePoint",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "start": "node --max-old-space-size=8192 src/app.js",
+    "dev": "nodemon --exec \"node --max-old-space-size=8192\" src/app.js"
   },
   "engines": {
     "node": ">=22.0.0"

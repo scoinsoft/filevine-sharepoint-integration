@@ -1,10 +1,26 @@
 const express = require('express');
+const path = require('path');
 const filevineService = require('../services/filevine.service');
 const sharepointService = require('../services/sharepoint.service');
 const { validatePowerAutomateEnv } = require('../config/env');
 const { log, logError } = require('../utils/logger');
+const { Semaphore } = require('../utils/semaphore');
 
 const router = express.Router();
+
+function readPositiveIntEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+// Small files can run in parallel; large base64 uploads are memory-heavy.
+const SYNC_CONCURRENCY = readPositiveIntEnv('SYNC_CONCURRENCY', 6);
+const SYNC_LARGE_FILE_MB = readPositiveIntEnv('SYNC_LARGE_FILE_MB', 25);
+const SYNC_LARGE_FILE_CONCURRENCY = readPositiveIntEnv('SYNC_LARGE_FILE_CONCURRENCY', 1);
+const LARGE_FILE_BYTES = SYNC_LARGE_FILE_MB * 1024 * 1024;
 
 function sendSse(res, event, data) {
   res.write(`event: ${event}\n`);
@@ -133,12 +149,97 @@ router.post('/projects/:projectId/sync', async (req, res) => {
       return res.end();
     }
 
-    for (const document of documents) {
+    const manifest = filevineService.readProjectUploadManifest(projectId, projectName);
+    const uploadedDocumentIds = manifest.uploadedDocumentIds;
+    const uploadedFilenames = manifest.uploadedFilenames;
+
+    let nextIndex = 0;
+    const largeUploadGate = new Semaphore(SYNC_LARGE_FILE_CONCURRENCY);
+
+    async function uploadWithMemoryGuard(filePath, size, mimeType) {
+      const isLarge = Number(size) > LARGE_FILE_BYTES;
+      const runUpload = () =>
+        sharepointService.uploadFile(filePath, projectId, projectName, mimeType);
+
+      if (!isLarge) {
+        return runUpload();
+      }
+
+      log('Queueing large file upload', {
+        projectId,
+        filename: path.basename(filePath),
+        size,
+        largeFileMb: SYNC_LARGE_FILE_MB,
+        maxConcurrentLargeUploads: SYNC_LARGE_FILE_CONCURRENCY,
+      });
+      return largeUploadGate.run(runUpload);
+    }
+
+    async function processDocument(document) {
       const item = {
         documentId: document.documentId,
         filename: document.filename,
         folderName: document.folderName,
       };
+      const documentKey = String(document.documentId);
+
+      if (uploadedDocumentIds.has(documentKey)) {
+        const skippedItem = {
+          ...item,
+          skippedAlreadyUploaded: true,
+        };
+        results.succeeded.push(skippedItem);
+        sendSse(res, 'file-success', {
+          ...skippedItem,
+          total,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+          message: `Skipped already uploaded: ${item.filename}`,
+        });
+
+        completed += 1;
+        sendSse(res, 'progress', {
+          stage: 'file-complete',
+          current: completed,
+          total,
+          percent: Math.round((completed / total) * 100),
+          currentFile: item.filename,
+          message: `Processed ${completed} of ${total}`,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+        });
+        return;
+      }
+
+      if (document.size && !sharepointService.isUploadableFileSize(document.size)) {
+        const failItem = {
+          ...item,
+          error: `File too large for base64 upload (${sharepointService.formatMegabytes(document.size)} MB). ` +
+            `Maximum supported is ${Math.round(sharepointService.getMaxUploadBytes() / (1024 * 1024))} MB.`,
+          skippedTooLarge: true,
+        };
+        results.failed.push(failItem);
+        sendSse(res, 'file-error', {
+          ...failItem,
+          total,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+          message: `Skipped too large: ${item.filename}`,
+        });
+
+        completed += 1;
+        sendSse(res, 'progress', {
+          stage: 'file-complete',
+          current: completed,
+          total,
+          percent: Math.round((completed / total) * 100),
+          currentFile: item.filename,
+          message: `Processed ${completed} of ${total}`,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+        });
+        return;
+      }
 
       let localFilePath = null;
 
@@ -163,6 +264,15 @@ router.post('/projects/:projectId/sync', async (req, res) => {
         );
         localFilePath = download.filePath;
 
+        if (!sharepointService.isUploadableFileSize(download.size)) {
+          filevineService.deleteLocalDownload(download.filePath);
+          localFilePath = null;
+          throw new Error(
+            `File too large for base64 upload (${sharepointService.formatMegabytes(download.size)} MB). ` +
+              `Maximum supported is ${Math.round(sharepointService.getMaxUploadBytes() / (1024 * 1024))} MB.`
+          );
+        }
+
         sendSse(res, 'progress', {
           stage: 'uploading',
           current: completed + 1,
@@ -176,15 +286,23 @@ router.post('/projects/:projectId/sync', async (req, res) => {
           failed: results.failed.length,
         });
 
-        const upload = await sharepointService.uploadFile(
+        const upload = await uploadWithMemoryGuard(
           download.filePath,
-          projectId,
-          projectName,
+          download.size,
           download.mimeType
         );
 
         filevineService.deleteLocalDownload(download.filePath);
         localFilePath = null;
+
+        filevineService.recordProjectUploadSuccess(
+          projectId,
+          projectName,
+          document.documentId,
+          download.filename,
+          uploadedDocumentIds,
+          uploadedFilenames
+        );
 
         const successItem = {
           ...item,
@@ -237,6 +355,19 @@ router.post('/projects/:projectId/sync', async (req, res) => {
         failed: results.failed.length,
       });
     }
+
+    const workerCount = Math.min(SYNC_CONCURRENCY, total);
+    const workers = Array.from({ length: workerCount }, () =>
+      (async () => {
+        while (true) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+          if (currentIndex >= documents.length) break;
+          await processDocument(documents[currentIndex]);
+        }
+      })()
+    );
+    await Promise.all(workers);
 
     sendSse(res, 'complete', {
       success: results.failed.length === 0,

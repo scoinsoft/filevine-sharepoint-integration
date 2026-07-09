@@ -24,7 +24,15 @@
       filesFail: 0,
       currentProjectName: '',
       paused: false,
+      pausedDueToCrash: false,
+      pauseReason: '',
       pauseResolver: null,
+      remainingProjects: [],
+      processing: false,
+    },
+    singleSync: {
+      pausedDueToCrash: false,
+      pauseReason: '',
     },
   };
 
@@ -32,6 +40,7 @@
 
   const els = {
     error: $('error'),
+    pauseNotice: $('pause-notice'),
     projectsStatus: $('projects-status'),
     projectsLoadingIndicator: $('projects-loading-indicator'),
     projectsLoadingText: $('projects-loading-text'),
@@ -96,6 +105,43 @@
     els.error.classList.remove('hidden');
   }
 
+  function showPauseNotice(message) {
+    if (!message) {
+      els.pauseNotice.classList.add('hidden');
+      els.pauseNotice.textContent = '';
+      return;
+    }
+    els.pauseNotice.textContent = message;
+    els.pauseNotice.classList.remove('hidden');
+  }
+
+  function hidePauseNotice() {
+    showPauseNotice('');
+  }
+
+  function isBackendConnectionError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return (
+      error instanceof TypeError ||
+      message.includes('failed to fetch') ||
+      message.includes('network') ||
+      message.includes('connection lost') ||
+      message.includes('backend connection') ||
+      message.includes('connection reset') ||
+      message.includes('econnreset') ||
+      message.includes('socket hang up') ||
+      message.includes('aborted')
+    );
+  }
+
+  function getBackendPauseMessage(error) {
+    const detail = error?.message ? ` (${error.message})` : '';
+    return (
+      `Sync paused: backend connection was lost${detail}. ` +
+      'Restart the server if it crashed, then click Resume. Already-uploaded files will be skipped.'
+    );
+  }
+
   function setButtonLoading(spinnerEl, labelEl, loading, idleText, loadingText) {
     if (loading) {
       spinnerEl.classList.remove('hidden');
@@ -125,22 +171,26 @@
   }
 
   function updateSyncButton() {
-    const busy = state.syncing || state.syncingAll;
-    els.syncBtn.disabled = !state.selected || busy || state.documents.length === 0;
-    setButtonLoading(
-      els.syncBtnSpinner,
-      els.syncBtnLabel,
-      state.syncing,
-      'Send files to SharePoint',
-      'Sending…'
-    );
+    const busy = state.syncing || (state.syncingAll && !state.syncAll.paused);
+    const canResumeSingle = state.singleSync.pausedDueToCrash && state.selected;
+    els.syncBtn.disabled = (!state.selected || busy || state.documents.length === 0) && !canResumeSingle;
+
+    if (state.syncing) {
+      setButtonLoading(els.syncBtnSpinner, els.syncBtnLabel, true, 'Send files to SharePoint', 'Sending…');
+    } else if (canResumeSingle) {
+      els.syncBtnSpinner.classList.add('hidden');
+      els.syncBtnLabel.textContent = 'Resume upload';
+    } else {
+      setButtonLoading(els.syncBtnSpinner, els.syncBtnLabel, false, 'Send files to SharePoint', 'Sending…');
+    }
   }
 
   function updateSyncAllControls() {
     const count = state.paging.loadedTo;
     const ready = state.paging.allLoaded && count > 0;
-    const busy = state.syncing || state.syncingAll;
+    const busy = state.syncing || (state.syncingAll && !state.syncAll.paused);
     const paused = state.syncingAll && state.syncAll.paused;
+    const canResumeAll = state.syncingAll && paused;
 
     els.syncAllBtn.disabled = !ready || busy;
     setButtonLoading(
@@ -152,9 +202,12 @@
     );
 
     els.pauseSyncAllBtn.disabled = !state.syncingAll || paused;
-    els.resumeSyncAllBtn.disabled = !state.syncingAll || !paused;
+    els.resumeSyncAllBtn.disabled = !canResumeAll;
 
-    if (state.syncingAll && paused) {
+    if (state.syncingAll && state.syncAll.pausedDueToCrash) {
+      els.syncAllHint.textContent =
+        'Paused due to backend/network issue. Fix the server, then click Resume to continue.';
+    } else if (state.syncingAll && paused) {
       els.syncAllHint.textContent = state.syncAll.currentProjectName
         ? `Paused after current project finishes (now: ${state.syncAll.currentProjectName}). Click Resume to continue.`
         : 'Paused. Click Resume to continue.';
@@ -188,6 +241,23 @@
     state.syncAll.pauseResolver = null;
   }
 
+  function pauseSyncAllDueToCrash(error, remainingProjects) {
+    if (!state.syncingAll) return;
+
+    const message = getBackendPauseMessage(error);
+    state.syncAll.paused = true;
+    state.syncAll.pausedDueToCrash = true;
+    state.syncAll.pauseReason = message;
+    state.syncAll.remainingProjects = remainingProjects || [];
+    state.syncAll.currentProjectName = '';
+
+    showPauseNotice(message);
+    showError('');
+    addSyncAllHistory(`Paused due to backend issue: ${error?.message || 'connection lost'}`, 'error');
+    updateSyncAllControls();
+    updateSyncAllProgressUi();
+  }
+
   function pauseSyncAll() {
     if (!state.syncingAll || state.syncAll.paused) return;
     state.syncAll.paused = true;
@@ -201,7 +271,19 @@
 
   function resumeSyncAll() {
     if (!state.syncingAll || !state.syncAll.paused) return;
+
     state.syncAll.paused = false;
+    if (state.syncAll.pausedDueToCrash) {
+      state.syncAll.pausedDueToCrash = false;
+      state.syncAll.pauseReason = '';
+      hidePauseNotice();
+      addSyncAllHistory('Resumed sync after backend pause.', 'info');
+      updateSyncAllControls();
+      updateSyncAllProgressUi();
+      continueSyncAll(state.syncAll.remainingProjects);
+      return;
+    }
+
     addSyncAllHistory('Resumed sync.', 'info');
     if (state.syncAll.pauseResolver) {
       state.syncAll.pauseResolver();
@@ -543,7 +625,9 @@
     els.syncAllProgressPercent.textContent = `${percent}%`;
 
     if (state.syncingAll && paused) {
-      els.syncAllProgressText.textContent = `Paused · ${projectsDone} / ${projectsTotal} projects`;
+      els.syncAllProgressText.textContent = state.syncAll.pausedDueToCrash
+        ? `Paused (backend issue) · ${projectsDone} / ${projectsTotal} projects`
+        : `Paused · ${projectsDone} / ${projectsTotal} projects`;
     } else if (state.syncingAll && currentProjectName) {
       els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects · ${currentProjectName}`;
     } else if (state.syncingAll) {
@@ -570,34 +654,49 @@
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let streamCompleted = false;
 
     return (async function pump() {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() || '';
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
 
-        for (const chunk of chunks) {
-          if (!chunk.trim()) continue;
+          for (const chunk of chunks) {
+            if (!chunk.trim()) continue;
 
-          let event = 'message';
-          const dataLines = [];
+            let event = 'message';
+            const dataLines = [];
 
-          for (const line of chunk.split('\n')) {
-            if (line.startsWith('event:')) event = line.slice(6).trim();
-            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
-          }
+            for (const line of chunk.split('\n')) {
+              if (line.startsWith('event:')) event = line.slice(6).trim();
+              else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+            }
 
-          if (!dataLines.length) continue;
-          try {
-            onEvent(event, JSON.parse(dataLines.join('\n')));
-          } catch {
-            // ignore bad chunks
+            if (!dataLines.length) continue;
+            try {
+              if (event === 'complete') {
+                streamCompleted = true;
+              }
+              onEvent(event, JSON.parse(dataLines.join('\n')));
+            } catch {
+              // ignore bad chunks
+            }
           }
         }
+      } catch (error) {
+        if (!streamCompleted) {
+          throw new Error(`Backend connection lost while receiving progress: ${error.message}`);
+        }
+        throw error;
+      }
+
+      if (!streamCompleted) {
+        throw new Error('Backend connection lost before sync completed.');
       }
     })();
   }
@@ -612,14 +711,19 @@
       onStatus,
     } = handlers;
 
-    const response = await fetch(
-      `/api/projects/${encodeURIComponent(project.projectId)}/sync`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectName: project.projectName }),
-      }
-    );
+    let response;
+    try {
+      response = await fetch(
+        `/api/projects/${encodeURIComponent(project.projectId)}/sync`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectName: project.projectName }),
+        }
+      );
+    } catch (error) {
+      throw new Error(`Backend connection lost before sync started: ${error.message}`);
+    }
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -666,18 +770,27 @@
   }
 
   async function startSync() {
-    if (!state.selected || state.syncing || state.syncingAll || state.documents.length === 0) {
+    if (!state.selected || state.syncing || (state.syncingAll && !state.syncAll.paused)) {
+      return;
+    }
+    const isResume = state.singleSync.pausedDueToCrash;
+    if (!isResume && state.documents.length === 0) {
       return;
     }
 
     state.syncing = true;
+    state.singleSync.pausedDueToCrash = false;
+    state.singleSync.pauseReason = '';
+    hidePauseNotice();
     updateSyncButton();
     updateSyncAllButton();
     showError('');
 
     els.progressBox.classList.remove('hidden');
-    els.resultList.innerHTML = '';
-    updateUploadProgress(state.documents.length, 0, 0);
+    if (!isResume) {
+      els.resultList.innerHTML = '';
+      updateUploadProgress(state.documents.length, 0, 0);
+    }
 
     try {
       await syncProjectToSharePoint(state.selected, {
@@ -699,8 +812,17 @@
         },
       });
     } catch (error) {
-      setProgress(0, 'Error');
-      showError(error.message);
+      if (isBackendConnectionError(error)) {
+        const message = getBackendPauseMessage(error);
+        state.singleSync.pausedDueToCrash = true;
+        state.singleSync.pauseReason = message;
+        showPauseNotice(message);
+        setProgress(0, 'Paused — backend connection lost');
+        showError('');
+      } else {
+        setProgress(0, 'Error');
+        showError(error.message);
+      }
     } finally {
       state.syncing = false;
       updateSyncButton();
@@ -709,11 +831,110 @@
     }
   }
 
+  async function continueSyncAll(projects) {
+    if (!projects.length) {
+      finishSyncAll();
+      return;
+    }
+    if (state.syncAll.processing) return;
+
+    state.syncAll.processing = true;
+    state.syncAll.remainingProjects = projects;
+
+    try {
+      for (let i = 0; i < projects.length; i += 1) {
+        const project = projects[i];
+        await waitIfPaused();
+
+        state.syncAll.currentProjectName = project.projectName || `Project ${project.projectId}`;
+        state.syncAll.remainingProjects = projects.slice(i);
+        updateSyncAllControls();
+        updateSyncAllProgressUi();
+        addSyncAllHistory(`▶ ${state.syncAll.currentProjectName}`, 'info');
+
+        try {
+          const summary = await syncProjectToSharePoint(project, {
+            onFileSuccess: (data) => {
+              state.syncAll.filesOk += 1;
+              updateSyncAllProgressUi();
+              addSyncAllHistory(
+                `  ✓ ${data.filename} (${project.projectName})`,
+                'success'
+              );
+            },
+            onFileError: (data) => {
+              state.syncAll.filesFail += 1;
+              updateSyncAllProgressUi();
+              addSyncAllHistory(
+                `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
+                'error'
+              );
+            },
+          });
+
+          state.syncAll.projectsDone += 1;
+          state.syncAll.remainingProjects = projects.slice(i + 1);
+          updateSyncAllProgressUi();
+          addSyncAllHistory(
+            `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
+            summary.failed > 0 ? 'error' : 'success'
+          );
+        } catch (error) {
+          if (isBackendConnectionError(error)) {
+            pauseSyncAllDueToCrash(error, projects.slice(i));
+            return;
+          }
+
+          state.syncAll.projectsDone += 1;
+          state.syncAll.remainingProjects = projects.slice(i + 1);
+          updateSyncAllProgressUi();
+          addSyncAllHistory(
+            `Failed project: ${project.projectName} — ${error.message}`,
+            'error'
+          );
+        }
+      }
+
+      finishSyncAll();
+    } finally {
+      state.syncAll.processing = false;
+    }
+  }
+
+  function finishSyncAll() {
+    state.syncAll.currentProjectName = '';
+    state.syncAll.paused = false;
+    state.syncAll.pausedDueToCrash = false;
+    state.syncAll.pauseReason = '';
+    state.syncAll.remainingProjects = [];
+    if (state.syncAll.pauseResolver) {
+      state.syncAll.pauseResolver();
+      state.syncAll.pauseResolver = null;
+    }
+    state.syncingAll = false;
+    hidePauseNotice();
+    updateSyncButton();
+    updateSyncAllControls();
+    updateProjectsPager();
+    updateSyncAllProgressUi();
+    addSyncAllHistory(
+      `Finished all projects · ${state.syncAll.filesOk} files uploaded, ${state.syncAll.filesFail} failed`,
+      state.syncAll.filesFail > 0 ? 'error' : 'success'
+    );
+  }
+
   async function startSyncAll() {
-    if (state.syncing || state.syncingAll || !state.paging.allLoaded) return;
+    if (state.syncing || (state.syncingAll && !state.syncAll.paused)) return;
+    if (!state.paging.allLoaded) return;
 
     const allProjects = getAllCachedProjects();
     if (allProjects.length === 0) return;
+
+    const isResume = state.syncingAll && state.syncAll.pausedDueToCrash;
+    if (isResume) {
+      resumeSyncAll();
+      return;
+    }
 
     state.syncingAll = true;
     state.syncAll = {
@@ -723,78 +944,25 @@
       filesFail: 0,
       currentProjectName: '',
       paused: false,
+      pausedDueToCrash: false,
+      pauseReason: '',
       pauseResolver: null,
+      remainingProjects: allProjects,
+      processing: false,
     };
 
     updateSyncButton();
     updateSyncAllControls();
     updateProjectsPager();
     showError('');
+    hidePauseNotice();
 
     els.syncAllProgressBox.classList.remove('hidden');
     els.syncAllResultList.innerHTML = '';
     updateSyncAllProgressUi();
     addSyncAllHistory(`Starting sync for ${allProjects.length} project(s)…`, 'info');
 
-    for (const project of allProjects) {
-      await waitIfPaused();
-
-      state.syncAll.currentProjectName = project.projectName || `Project ${project.projectId}`;
-      updateSyncAllControls();
-      updateSyncAllProgressUi();
-      addSyncAllHistory(`▶ ${state.syncAll.currentProjectName}`, 'info');
-
-      try {
-        const summary = await syncProjectToSharePoint(project, {
-          onFileSuccess: (data) => {
-            state.syncAll.filesOk += 1;
-            updateSyncAllProgressUi();
-            addSyncAllHistory(
-              `  ✓ ${data.filename} (${project.projectName})`,
-              'success'
-            );
-          },
-          onFileError: (data) => {
-            state.syncAll.filesFail += 1;
-            updateSyncAllProgressUi();
-            addSyncAllHistory(
-              `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
-              'error'
-            );
-          },
-        });
-
-        state.syncAll.projectsDone += 1;
-        updateSyncAllProgressUi();
-        addSyncAllHistory(
-          `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
-          summary.failed > 0 ? 'error' : 'success'
-        );
-      } catch (error) {
-        state.syncAll.projectsDone += 1;
-        updateSyncAllProgressUi();
-        addSyncAllHistory(
-          `Failed project: ${project.projectName} — ${error.message}`,
-          'error'
-        );
-      }
-    }
-
-    state.syncAll.currentProjectName = '';
-    state.syncAll.paused = false;
-    if (state.syncAll.pauseResolver) {
-      state.syncAll.pauseResolver();
-      state.syncAll.pauseResolver = null;
-    }
-    state.syncingAll = false;
-    updateSyncButton();
-    updateSyncAllControls();
-    updateProjectsPager();
-    updateSyncAllProgressUi();
-    addSyncAllHistory(
-      `Finished all projects · ${state.syncAll.filesOk} files uploaded, ${state.syncAll.filesFail} failed`,
-      state.syncAll.filesFail > 0 ? 'error' : 'success'
-    );
+    await continueSyncAll(allProjects);
   }
 
   els.syncBtn.addEventListener('click', startSync);
