@@ -1,0 +1,159 @@
+{
+  "projectId": "68805",
+  "projectName": "Rinderle, Linda L",
+  "updatedAt": "2026-07-09T16:29:10.883Z",
+  "failed": [
+    {
+      "documentId": "1050356",
+      "filename": "0000014D",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\0000014D'",
+      "firstFailedAt": "2026-07-09T16:01:39.336Z",
+      "lastFailedAt": "2026-07-09T16:01:39.336Z"
+    },
+    {
+      "documentId": "1050359",
+      "filename": "00000146",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000146'",
+      "firstFailedAt": "2026-07-09T16:01:32.452Z",
+      "lastFailedAt": "2026-07-09T16:01:32.452Z"
+    },
+    {
+      "documentId": "1050473",
+      "filename": "0000008C",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\0000008C'",
+      "firstFailedAt": "2026-07-09T15:56:54.085Z",
+      "lastFailedAt": "2026-07-09T15:56:54.085Z"
+    },
+    {
+      "documentId": "1050547",
+      "filename": "0000003F",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\0000003F'",
+      "firstFailedAt": "2026-07-09T15:55:32.764Z",
+      "lastFailedAt": "2026-07-09T15:55:32.764Z"
+    },
+    {
+      "documentId": "1050601",
+      "filename": "00000006",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000006'",
+      "firstFailedAt": "2026-07-09T15:53:21.441Z",
+      "lastFailedAt": "2026-07-09T15:53:21.441Z"
+    },
+    {
+      "documentId": "1050635",
+      "filename": "2023-01-03 L Kemper-Doehling.pdf",
+      "folderName": "Correspondence",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\2023-01-03 L Kemper-Doehling.pdf'",
+      "firstFailedAt": "2026-07-09T16:15:19.678Z",
+      "lastFailedAt": "2026-07-09T16:15:19.678Z"
+    },
+    {
+      "documentId": "1050785",
+      "filename": "00000040",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000040'",
+      "firstFailedAt": "2026-07-09T15:55:31.283Z",
+      "lastFailedAt": "2026-07-09T15:55:31.283Z"
+    },
+    {
+      "documentId": "1050810",
+      "filename": "0000000E",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\0000000E'",
+      "firstFailedAt": "2026-07-09T15:53:26.878Z",
+      "lastFailedAt": "2026-07-09T15:53:26.878Z"
+    },
+    {
+      "documentId": "1051074",
+      "filename": "00000282",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000282'",
+      "firstFailedAt": "2026-07-09T16:08:19.403Z",
+      "lastFailedAt": "2026-07-09T16:08:19.403Z"
+    },
+    {
+      "documentId": "118371523",
+      "filename": "2024-01-23 Demand.pdf",
+      "folderName": "Correspondence",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\2024-01-23 Demand.pdf'",
+      "firstFailedAt": "2026-07-09T16:21:51.631Z",
+      "lastFailedAt": "2026-07-09T16:21:51.631Z"
+    },
+    {
+      "documentId": "180690426",
+      "filename": "d031bf27-2539-472a-9c11-91046936d15c.jpg",
+      "folderName": "File for Ramos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\d031bf27-2539-472a-9c11-91046936d15c.jpg'",
+      "firstFailedAt": "2026-07-09T16:27:55.004Z",
+      "lastFailedAt": "2026-07-09T16:27:55.004Z"
+    },
+    {
+      "documentId": "1898629",
+      "filename": "2023-01-24 Chk Safeco-Linda Rinderle (Fisher Pmt $2674.88).pdf",
+      "folderName": "Settlement Documents",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\2023-01-24 Chk Safeco-Linda Rinderle (Fisher Pmt $2674.88).pdf'",
+      "firstFailedAt": "2026-07-09T16:15:27.393Z",
+      "lastFailedAt": "2026-07-09T16:15:27.393Z"
+    },
+    {
+      "documentId": "28362799",
+      "filename": "Community Therapy Works 000001-000069.pdf",
+      "folderName": "Medical Records",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\Community Therapy Works 000001-000069.pdf'",
+      "firstFailedAt": "2026-07-09T16:29:10.882Z",
+      "lastFailedAt": "2026-07-09T16:29:10.882Z"
+    },
+    {
+      "documentId": "66134061",
+      "filename": "B-Community Therapy Works 000001-000007.pdf",
+      "folderName": "Medical Billing",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\B-Community Therapy Works 000001-000007.pdf'",
+      "firstFailedAt": "2026-07-09T16:21:48.465Z",
+      "lastFailedAt": "2026-07-09T16:21:48.465Z"
+    },
+    {
+      "documentId": "927125",
+      "filename": "00000041",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000041'",
+      "firstFailedAt": "2026-07-09T15:55:36.905Z",
+      "lastFailedAt": "2026-07-09T15:55:36.905Z"
+    },
+    {
+      "documentId": "927291",
+      "filename": "00000088",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000088'",
+      "firstFailedAt": "2026-07-09T15:56:50.899Z",
+      "lastFailedAt": "2026-07-09T15:56:50.899Z"
+    },
+    {
+      "documentId": "927305",
+      "filename": "0000007E",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\0000007E'",
+      "firstFailedAt": "2026-07-09T15:56:47.498Z",
+      "lastFailedAt": "2026-07-09T15:56:47.498Z"
+    },
+    {
+      "documentId": "927345",
+      "filename": "00000062",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000062'",
+      "firstFailedAt": "2026-07-09T15:56:00.364Z",
+      "lastFailedAt": "2026-07-09T15:56:00.364Z"
+    },
+    {
+      "documentId": "927826",
+      "filename": "00000155",
+      "folderName": "DICOMOBJ",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Rinderle, Linda L_68805\\00000155'",
+      "firstFailedAt": "2026-07-09T16:01:45.799Z",
+      "lastFailedAt": "2026-07-09T16:01:45.799Z"
+    }
+  ]
+}

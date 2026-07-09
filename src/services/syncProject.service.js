@@ -47,6 +47,10 @@ function buildSyncSummaryCounts(results) {
 }
 
 function persistProjectSyncHistory(summary, options, startedAt) {
+  if ((options.trigger || 'manual') !== 'scheduled') {
+    return null;
+  }
+
   const finishedAt = new Date().toISOString();
   return syncHistoryService.saveProjectSyncHistory(summary, {
     trigger: options.trigger || 'manual',
@@ -56,6 +60,51 @@ function persistProjectSyncHistory(summary, options, startedAt) {
     finishedAt,
     durationMs: Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime()),
   });
+}
+
+function finishArchivedProjectSkip({
+  projectId,
+  projectName,
+  projectMeta,
+  results,
+  options,
+  runFolder,
+  startedAt,
+  emit,
+}) {
+  const summary = {
+    success: true,
+    skippedArchivedProject: true,
+    projectId,
+    projectName,
+    projectNumber: projectMeta.projectNumber || null,
+    phaseName: projectMeta.phaseName || null,
+    isArchived: true,
+    total: 0,
+    succeeded: 0,
+    failed: 0,
+    counts: {
+      ...buildSyncSummaryCounts(results),
+      totalDocuments: 0,
+    },
+    results,
+    message: `Skipped archived project: ${projectName}${
+      projectMeta.projectNumber ? ` (#${projectMeta.projectNumber})` : ''
+    }${projectMeta.phaseName ? ` · ${projectMeta.phaseName}` : ''} — no files synced`,
+  };
+  const history = persistProjectSyncHistory(summary, { ...options, runFolder }, startedAt);
+  emit('started', {
+    projectId,
+    projectName,
+    projectNumber: projectMeta.projectNumber || null,
+    total: 0,
+    skippedArchivedProject: true,
+    phaseName: projectMeta.phaseName,
+    isArchived: true,
+    message: summary.message,
+  });
+  emit('complete', { ...summary, historyFile: history?.relativePath || null });
+  return { ...summary, historyFile: history?.relativePath || null };
 }
 
 async function syncProject(projectId, projectName, options = {}) {
@@ -110,6 +159,41 @@ async function syncProject(projectId, projectName, options = {}) {
         const freshToken = await refreshAccessToken();
         return operation(freshToken);
       }
+    }
+
+    emit('status', {
+      stage: 'checking-project',
+      message: `Checking project status for ${projectName}…`,
+      projectId,
+      projectName,
+    });
+
+    const projectMeta = await withTokenRetry('getProject', (token) =>
+      filevineService.getProject(token, projectId)
+    );
+
+    if (projectMeta.isArchived) {
+      emit('status', {
+        stage: 'skipped-archived',
+        message: `Skipping archived project: ${projectName}${
+          projectMeta.projectNumber ? ` (#${projectMeta.projectNumber})` : ''
+        }${projectMeta.phaseName ? ` · ${projectMeta.phaseName}` : ''}`,
+        projectId,
+        projectName,
+        projectNumber: projectMeta.projectNumber || null,
+        phaseName: projectMeta.phaseName,
+        isArchived: true,
+      });
+      return finishArchivedProjectSkip({
+        projectId,
+        projectName,
+        projectMeta,
+        results,
+        options,
+        runFolder,
+        startedAt,
+        emit,
+      });
     }
 
     emit('status', {
@@ -189,6 +273,34 @@ async function syncProject(projectId, projectName, options = {}) {
         folderName: document.folderName,
       };
       const documentKey = String(document.documentId);
+
+      if (!filevineService.hasFileExtension(item.filename)) {
+        const skippedItem = {
+          ...item,
+          skippedNoExtension: true,
+        };
+        results.succeeded.push(skippedItem);
+        emit('file-success', {
+          ...skippedItem,
+          total,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+          message: `Skipped (no file extension): ${item.filename}`,
+        });
+
+        completed += 1;
+        emit('progress', {
+          stage: 'file-complete',
+          current: completed,
+          total,
+          percent: Math.round((completed / total) * 100),
+          currentFile: item.filename,
+          message: `Processed ${completed} of ${total}`,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+        });
+        return;
+      }
 
       if (uploadedDocumentIds.has(documentKey)) {
         const skippedItem = {
@@ -404,7 +516,7 @@ async function syncProject(projectId, projectName, options = {}) {
       },      results,
       message:
         results.failed.length === 0
-          ? `${counts.newlyUploaded} newly uploaded, ${counts.skippedAlreadyUploaded} skipped (already uploaded)`
+          ? `${counts.newlyUploaded} newly uploaded, ${counts.skippedAlreadyUploaded} skipped`
           : `Finished with ${counts.newlyUploaded} newly uploaded, ${counts.skippedAlreadyUploaded} skipped, ${counts.failed} failed`,
     };
     const history = persistProjectSyncHistory(summary, { ...options, runFolder }, startedAt);

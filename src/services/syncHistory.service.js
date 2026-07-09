@@ -75,8 +75,11 @@ function categorizeSyncResults(results = {}) {
       folderName: item.folderName || null,
     };
 
-    if (item.skippedAlreadyUploaded) {
-      skippedAlreadyUploaded.push(entry);
+    if (item.skippedAlreadyUploaded || item.skippedNoExtension) {
+      skippedAlreadyUploaded.push({
+        ...entry,
+        reason: item.skippedNoExtension ? 'no_extension' : 'already_uploaded',
+      });
       continue;
     }
 
@@ -137,6 +140,9 @@ function buildProjectSyncRecord(summary, meta = {}) {
     finishedAt,
     durationMs,
     success: summary.success !== false && categorized.failed.length === 0 && !summary.error,
+    skippedArchivedProject: Boolean(summary.skippedArchivedProject),
+    projectNumber: summary.projectNumber || null,
+    phaseName: summary.phaseName || null,
     error: summary.error || null,
     counts: buildCounts(categorized, summary.total ?? 0),
     newlyUploaded: categorized.newlyUploaded,
@@ -193,6 +199,7 @@ function buildScheduledRunRecord(runMeta = {}, projectEntries = []) {
     failedUpload: 0,
     projectsSucceeded: 0,
     projectsFailed: 0,
+    projectsSkippedArchived: 0,
   };
 
   const projects = projectEntries.map((entry) => {
@@ -212,7 +219,10 @@ function buildScheduledRunRecord(runMeta = {}, projectEntries = []) {
     aggregateCounts.failedTooLarge += counts.failedTooLarge;
     aggregateCounts.failedUpload += counts.failedUpload;
 
-    if (entry.record?.success) {
+    if (entry.record?.skippedArchivedProject) {
+      aggregateCounts.projectsSkippedArchived += 1;
+      aggregateCounts.projectsSucceeded += 1;
+    } else if (entry.record?.success) {
       aggregateCounts.projectsSucceeded += 1;
     } else {
       aggregateCounts.projectsFailed += 1;
@@ -222,6 +232,7 @@ function buildScheduledRunRecord(runMeta = {}, projectEntries = []) {
       projectId: entry.projectId,
       projectName: entry.projectName,
       success: Boolean(entry.record?.success),
+      skippedArchivedProject: Boolean(entry.record?.skippedArchivedProject),
       error: entry.error || entry.record?.error || null,
       counts,
       historyFile: entry.historyFile || null,

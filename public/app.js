@@ -1,5 +1,9 @@
 (() => {
   const SESSION_KEY = 'fv_sp_session_token';
+  const SYNC_ALL_SNAPSHOT_KEY = 'fv_sp_sync_all_snapshot_v1';
+  const SYNC_ALL_PROJECT_CONCURRENCY = 3;
+  const MAX_SINGLE_RESULT_ROWS = 600;
+  const MAX_SYNC_ALL_HISTORY_ROWS = 1500;
 
   const state = {
     projects: [],
@@ -23,14 +27,21 @@
       projectsTotal: 0,
       projectsDone: 0,
       filesOk: 0,
+      filesSkipped: 0,
       filesFail: 0,
+      projectsSkippedArchived: 0,
+      elapsedMs: 0,
+      timerStartedAt: null,
+      timerIntervalId: null,
       currentProjectName: '',
+      activeProjects: [],
       paused: false,
       pausedDueToCrash: false,
       pauseReason: '',
       pauseResolver: null,
       remainingProjects: [],
       processing: false,
+      resumeSnapshot: null,
     },
     singleSync: {
       pausedDueToCrash: false,
@@ -144,18 +155,75 @@
     syncAllBtnIcon: $('sync-all-btn-icon'),
     pauseSyncAllBtn: $('pause-sync-all-btn'),
     resumeSyncAllBtn: $('resume-sync-all-btn'),
+    resumeLastSyncAllBtn: $('resume-last-sync-all-btn'),
     syncAllHintSpinner: $('sync-all-hint-spinner'),
     syncAllHintText: $('sync-all-hint-text'),
     syncAllProgressBox: $('sync-all-progress-box'),
     syncAllProgressText: $('sync-all-progress-text'),
     syncAllProgressPercent: $('sync-all-progress-percent'),
+    syncAllElapsed: $('sync-all-elapsed'),
     syncAllProgressBar: $('sync-all-progress-bar'),
     syncAllProjectsDone: $('sync-all-projects-done'),
     syncAllProjectsTotal: $('sync-all-projects-total'),
     syncAllFilesOk: $('sync-all-files-ok'),
+    syncAllFilesSkipped: $('sync-all-files-skipped'),
+    syncAllProjectsSkippedArchived: $('sync-all-projects-skipped-archived'),
     syncAllFilesFail: $('sync-all-files-fail'),
     syncAllResultList: $('sync-all-result-list'),
   };
+
+  function formatArchivedProjectSkipLine(project, summary = {}) {
+    const name = summary.projectName || project?.projectName || 'Unknown project';
+    const id = summary.projectId || project?.projectId;
+    const number = summary.projectNumber || project?.projectNumber;
+    const phase = summary.phaseName || project?.phaseName;
+    const details = [];
+    if (number) details.push(`#${number}`);
+    if (id != null) details.push(`ID ${id}`);
+    if (phase) details.push(`phase: ${phase}`);
+    const suffix = details.length ? ` (${details.join(' · ')})` : '';
+    return `Skipped archived project: ${name}${suffix} — no files synced`;
+  }
+
+  function isLikelyArchivedProject(project) {
+    return project?.isArchived === true || project?.phaseName === 'Archived';
+  }
+
+  function getProjectArchiveCounts() {
+    const projects = getAllCachedProjects();
+    let archived = 0;
+    for (const project of projects) {
+      if (isLikelyArchivedProject(project)) archived += 1;
+    }
+    return {
+      total: projects.length,
+      archived,
+      active: projects.length - archived,
+    };
+  }
+
+  function formatProjectTotalsLabel() {
+    const { total, archived, active } = getProjectArchiveCounts();
+    if (total === 0) return '';
+
+    const breakdown = ` · ${active} active · ${archived} archived`;
+    if (state.paging.allLoaded) {
+      return ` · ${state.paging.loadedTo} total${breakdown}`;
+    }
+    return ` · ${total} loaded${breakdown}`;
+  }
+
+  function renderProjectStatusRibbon(project) {
+    if (!isLikelyArchivedProject(project)) return '';
+    return `
+      <span class="pointer-events-none absolute right-0 top-0 h-12 w-12 overflow-hidden" aria-hidden="true">
+        <span class="absolute right-[-18px] top-[8px] w-[72px] rotate-45 bg-amber-500 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+          Archived
+        </span>
+      </span>
+      <span class="sr-only">Archived project</span>
+    `;
+  }
 
   function getSessionToken() {
     return localStorage.getItem(SESSION_KEY);
@@ -167,6 +235,182 @@
 
   function clearSessionToken() {
     localStorage.removeItem(SESSION_KEY);
+  }
+
+  function isIncompleteSyncSnapshot(snapshot) {
+    if (!snapshot) return false;
+    const total = Number(snapshot.projectsTotal) || 0;
+    const done = Number(snapshot.projectsDone) || 0;
+    if (total > 0 && done >= total) return false;
+
+    const remaining = Array.isArray(snapshot.remainingProjects) ? snapshot.remainingProjects : [];
+    const remainingIds = Array.isArray(snapshot.remainingProjectIds) ? snapshot.remainingProjectIds : [];
+    return remaining.length > 0 || remainingIds.length > 0 || (total > 0 && done < total);
+  }
+
+  function normalizeSyncAllSnapshot(parsed) {
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    let remainingProjects = Array.isArray(parsed.remainingProjects) ? parsed.remainingProjects : [];
+    if (!remainingProjects.length && Array.isArray(parsed.remainingProjectIds)) {
+      remainingProjects = parsed.remainingProjectIds.map((projectId) => ({
+        projectId,
+        projectName: `Project ${projectId}`,
+      }));
+    }
+
+    remainingProjects = remainingProjects
+      .map((project) => ({
+        projectId: project?.projectId,
+        projectName: project?.projectName || `Project ${project?.projectId}`,
+        projectNumber: project?.projectNumber ?? null,
+        phaseName: project?.phaseName ?? null,
+        createdDate: project?.createdDate ?? null,
+      }))
+      .filter((project) => project.projectId != null);
+
+    const snapshot = {
+      ...parsed,
+      remainingProjects,
+      remainingProjectIds: remainingProjects.map((project) => project.projectId),
+    };
+
+    return isIncompleteSyncSnapshot(snapshot) ? snapshot : null;
+  }
+
+  function saveSyncAllSnapshot() {
+    if (!state.syncingAll) return;
+
+    const remaining = state.syncAll.remainingProjects || [];
+    const total = Number(state.syncAll.projectsTotal) || 0;
+    const done = Number(state.syncAll.projectsDone) || 0;
+    if (!remaining.length && total > 0 && done >= total) return;
+
+    const progressPercent = total > 0 ? Math.round((done / total) * 100) : 0;
+    const currentProject =
+      state.syncAll.activeProjects?.[0] ||
+      state.syncAll.currentProjectName ||
+      remaining[0]?.projectName ||
+      '';
+    const payload = {
+      savedAt: new Date().toISOString(),
+      projectsTotal: state.syncAll.projectsTotal,
+      projectsDone: state.syncAll.projectsDone,
+      filesOk: state.syncAll.filesOk,
+      filesSkipped: state.syncAll.filesSkipped,
+      filesFail: state.syncAll.filesFail,
+      projectsSkippedArchived: state.syncAll.projectsSkippedArchived,
+      elapsedMs: state.syncAll.elapsedMs,
+      progressPercent,
+      currentProject,
+      remainingProjectIds: remaining.map((project) => project.projectId),
+      remainingProjects: remaining.map((project) => ({
+        projectId: project.projectId,
+        projectName: project.projectName,
+      })),
+    };
+    localStorage.setItem(SYNC_ALL_SNAPSHOT_KEY, JSON.stringify(payload));
+    state.syncAll.resumeSnapshot = payload;
+  }
+
+  function clearSyncAllSnapshot() {
+    localStorage.removeItem(SYNC_ALL_SNAPSHOT_KEY);
+    state.syncAll.resumeSnapshot = null;
+  }
+
+  function loadSyncAllSnapshot() {
+    const raw = localStorage.getItem(SYNC_ALL_SNAPSHOT_KEY);
+    if (!raw) return null;
+    try {
+      return normalizeSyncAllSnapshot(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
+
+  function refreshResumeSnapshot() {
+    const snapshot = loadSyncAllSnapshot();
+    state.syncAll.resumeSnapshot = snapshot;
+    if (!snapshot) {
+      localStorage.removeItem(SYNC_ALL_SNAPSHOT_KEY);
+    }
+    return snapshot;
+  }
+
+  function getResumeSnapshot() {
+    if (state.syncAll.resumeSnapshot && isIncompleteSyncSnapshot(state.syncAll.resumeSnapshot)) {
+      return state.syncAll.resumeSnapshot;
+    }
+    return refreshResumeSnapshot();
+  }
+
+  function resolveSnapshotRemainingProjects(snapshot) {
+    const cached = getAllCachedProjects();
+    const cacheById = new Map(cached.map((project) => [String(project.projectId), project]));
+    const fromSnapshot = (snapshot.remainingProjects || []).map((project) => {
+      const cachedProject = cacheById.get(String(project.projectId));
+      return (
+        cachedProject || {
+          projectId: project.projectId,
+          projectName: project.projectName || `Project ${project.projectId}`,
+        }
+      );
+    });
+
+    if (fromSnapshot.length > 0) {
+      return fromSnapshot;
+    }
+
+    const total = Number(snapshot.projectsTotal) || 0;
+    const done = Number(snapshot.projectsDone) || 0;
+    if (cached.length >= total && total > done) {
+      return cached.slice(done);
+    }
+
+    return (snapshot.remainingProjectIds || []).map((projectId) => {
+      const cachedProject = cacheById.get(String(projectId));
+      return (
+        cachedProject || {
+          projectId,
+          projectName: `Project ${projectId}`,
+        }
+      );
+    });
+  }
+
+  function formatElapsedMs(ms) {
+    const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((v) => String(v).padStart(2, '0')).join(':');
+  }
+
+  function updateSyncAllElapsedLabel() {
+    if (!els.syncAllElapsed) return;
+    els.syncAllElapsed.textContent = formatElapsedMs(state.syncAll.elapsedMs);
+  }
+
+  function stopSyncAllTimer() {
+    if (state.syncAll.timerIntervalId) {
+      clearInterval(state.syncAll.timerIntervalId);
+      state.syncAll.timerIntervalId = null;
+    }
+    state.syncAll.timerStartedAt = null;
+  }
+
+  function startSyncAllTimer() {
+    if (!state.syncingAll || state.syncAll.paused || state.syncAll.timerIntervalId) return;
+
+    state.syncAll.timerStartedAt = Date.now();
+    state.syncAll.timerIntervalId = setInterval(() => {
+      if (!state.syncingAll || state.syncAll.paused) return;
+      const now = Date.now();
+      const delta = Math.max(0, now - (state.syncAll.timerStartedAt || now));
+      state.syncAll.timerStartedAt = now;
+      state.syncAll.elapsedMs += delta;
+      updateSyncAllElapsedLabel();
+    }, 1000);
   }
 
   function authHeaders(extra = {}) {
@@ -506,6 +750,8 @@
     els.loggedInUserName.textContent = username ? username : '';
     hideLoginError();
     hideSessionConflictModal();
+    refreshResumeSnapshot();
+    updateSyncAllControls();
     startSchedulePolling();
   }
 
@@ -908,6 +1154,8 @@
     const busy = state.syncing || (state.syncingAll && !state.syncAll.paused);
     const paused = state.syncingAll && state.syncAll.paused;
     const canResumeAll = state.syncingAll && paused;
+    const resumeSnapshot = getResumeSnapshot();
+    const canResumePrevious = !state.syncingAll && !state.syncing && Boolean(resumeSnapshot);
 
     els.syncAllBtn.disabled = scheduledBlocked || serverSyncing || !ready || busy;
     setButtonLoading(
@@ -921,6 +1169,18 @@
 
     els.pauseSyncAllBtn.disabled = !state.syncingAll || paused;
     els.resumeSyncAllBtn.disabled = !canResumeAll;
+    els.resumeLastSyncAllBtn.disabled = !canResumePrevious;
+    if (canResumePrevious) {
+      const snap = resumeSnapshot;
+      const remainingCount = snap.remainingProjects?.length || snap.remainingProjectIds?.length || 0;
+      const projectLabel = snap.currentProject || snap.remainingProjects?.[0]?.projectName || 'unknown project';
+      const tooltip = `Last interrupted at ${snap.progressPercent ?? 0}% (${snap.projectsDone}/${snap.projectsTotal} projects). ${remainingCount} remaining. Next: ${projectLabel}.`;
+      els.resumeLastSyncAllBtn.title = tooltip;
+      els.resumeLastSyncAllBtn.setAttribute('aria-label', tooltip);
+    } else {
+      els.resumeLastSyncAllBtn.title = '';
+      els.resumeLastSyncAllBtn.setAttribute('aria-label', 'Resume previous run');
+    }
 
     if (state.syncingAll && state.syncAll.pausedDueToCrash) {
       setSyncAllHint('Paused due to backend/network issue. Fix the server, then click Resume.', false);
@@ -940,6 +1200,13 @@
       );
     } else if (serverSyncing) {
       setSyncAllHint('A project upload is still running on the server.', true);
+    } else if (canResumePrevious) {
+      const remainingCount =
+        resumeSnapshot.remainingProjects?.length || resumeSnapshot.remainingProjectIds?.length || 0;
+      setSyncAllHint(
+        `Previous run interrupted at ${resumeSnapshot.progressPercent ?? 0}% (${resumeSnapshot.projectsDone}/${resumeSnapshot.projectsTotal}). ${remainingCount} project(s) ready to resume.`,
+        false
+      );
     } else if (scheduledBlocked) {
       setSyncAllHint('Scheduled sync is running — manual uploads are disabled (about 2–3 hours).', true);
     } else if (!state.paging.allLoaded) {
@@ -976,6 +1243,8 @@
     state.syncAll.pausedDueToCrash = true;
     state.syncAll.pauseReason = message;
     state.syncAll.remainingProjects = remainingProjects || [];
+    stopSyncAllTimer();
+    saveSyncAllSnapshot();
     state.syncAll.currentProjectName = '';
 
     showPauseNotice(message);
@@ -988,6 +1257,8 @@
   function pauseSyncAll() {
     if (!state.syncingAll || state.syncAll.paused) return;
     state.syncAll.paused = true;
+    stopSyncAllTimer();
+    saveSyncAllSnapshot();
     addSyncAllHistory(
       'Pause requested — current project will finish, then sync waits.',
       'info'
@@ -1000,6 +1271,7 @@
     if (!state.syncingAll || !state.syncAll.paused) return;
 
     state.syncAll.paused = false;
+    startSyncAllTimer();
     if (state.syncAll.pausedDueToCrash) {
       state.syncAll.pausedDueToCrash = false;
       state.syncAll.pauseReason = '';
@@ -1040,7 +1312,7 @@
     } else if (state.projects.length === 0) {
       setProjectsStatus('No projects on this page.', false);
     } else {
-      const totalNote = state.paging.allLoaded ? ` · ${state.paging.loadedTo} total` : '';
+      const totalNote = formatProjectTotalsLabel();
       setProjectsStatus(`Select a project${totalNote}`, false);
     }
 
@@ -1151,22 +1423,24 @@
           state.selected && String(state.selected.projectId) === String(project.projectId);
         const rowNumber = state.paging.offset + index + 1;
         const projectNumber = formatProjectNumber(project);
+        const archived = isLikelyArchivedProject(project);
         return `
           <li>
             <button
               type="button"
               data-id="${escapeHtml(project.projectId)}"
-              class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition ${
+              class="${archived ? 'relative overflow-hidden pr-10' : ''} flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition ${
                 selected
                   ? 'border-l-2 border-blue-600 bg-blue-50 font-medium text-blue-900'
                   : 'border-l-2 border-transparent text-gray-800 hover:bg-gray-50'
-              }"
+              } ${archived ? 'opacity-95' : ''}"
             >
               <span class="w-8 shrink-0 text-xs tabular-nums text-gray-400">${rowNumber}</span>
               <span class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs tabular-nums text-gray-600 ${
                 selected ? 'bg-blue-100 text-blue-800' : ''
               }">${escapeHtml(projectNumber)}</span>
               <span class="min-w-0 flex-1 truncate">${escapeHtml(project.projectName)}</span>
+              ${renderProjectStatusRibbon(project)}
             </button>
           </li>
         `;
@@ -1417,6 +1691,16 @@
     setProgress(percent, `${uploaded} / ${safeTotal} files`);
   }
 
+  function addArchivedSkipResult(data) {
+    const li = document.createElement('li');
+    li.className = 'rounded bg-amber-50 px-2 py-1 text-amber-900';
+    li.textContent = formatArchivedProjectSkipLine(null, data);
+    els.resultList.prepend(li);
+    while (els.resultList.children.length > MAX_SINGLE_RESULT_ROWS) {
+      els.resultList.removeChild(els.resultList.lastElementChild);
+    }
+  }
+
   function addResult(filename, ok, detail) {
     const li = document.createElement('li');
     li.className = ok
@@ -1426,31 +1710,48 @@
       ? `✓ ${escapeHtml(filename)}`
       : `✗ ${escapeHtml(filename)} — ${escapeHtml(detail || 'failed')}`;
     els.resultList.prepend(li);
+    while (els.resultList.children.length > MAX_SINGLE_RESULT_ROWS) {
+      els.resultList.removeChild(els.resultList.lastElementChild);
+    }
   }
 
   function updateSyncAllProgressUi() {
-    const { projectsTotal, projectsDone, filesOk, filesFail, currentProjectName, paused } =
-      state.syncAll;
+    const {
+      projectsTotal,
+      projectsDone,
+      filesOk,
+      filesSkipped,
+      filesFail,
+      projectsSkippedArchived,
+      currentProjectName,
+      paused,
+    } = state.syncAll;
     const percent =
       projectsTotal === 0 ? 100 : Math.round((projectsDone / projectsTotal) * 100);
 
     els.syncAllProjectsDone.textContent = String(projectsDone);
     els.syncAllProjectsTotal.textContent = String(projectsTotal);
     els.syncAllFilesOk.textContent = String(filesOk);
+    els.syncAllFilesSkipped.textContent = String(filesSkipped || 0);
+    els.syncAllProjectsSkippedArchived.textContent = String(projectsSkippedArchived || 0);
     els.syncAllFilesFail.textContent = String(filesFail);
     els.syncAllProgressBar.style.width = `${percent}%`;
     els.syncAllProgressPercent.textContent = `${percent}%`;
+    updateSyncAllElapsedLabel();
+
+    const archivedNote =
+      projectsSkippedArchived > 0 ? ` · ${projectsSkippedArchived} archived skipped` : '';
 
     if (state.syncingAll && paused) {
       els.syncAllProgressText.textContent = state.syncAll.pausedDueToCrash
-        ? `Paused (backend issue) · ${projectsDone} / ${projectsTotal} projects`
-        : `Paused · ${projectsDone} / ${projectsTotal} projects`;
+        ? `Paused (backend issue) · ${projectsDone} / ${projectsTotal} projects${archivedNote}`
+        : `Paused · ${projectsDone} / ${projectsTotal} projects${archivedNote}`;
     } else if (state.syncingAll && currentProjectName) {
-      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects · ${currentProjectName}`;
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects${archivedNote} · ${currentProjectName}`;
     } else if (state.syncingAll) {
-      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects`;
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects${archivedNote}`;
     } else {
-      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects done`;
+      els.syncAllProgressText.textContent = `${projectsDone} / ${projectsTotal} projects done${archivedNote}`;
     }
   }
 
@@ -1460,10 +1761,14 @@
       success: 'rounded bg-green-50 px-2 py-1 text-green-800',
       error: 'rounded bg-red-50 px-2 py-1 text-red-800',
       info: 'rounded bg-gray-50 px-2 py-1 text-gray-700',
+      archived: 'rounded bg-amber-50 px-2 py-1 text-amber-900',
     };
     li.className = styles[type] || styles.info;
     li.textContent = message;
     els.syncAllResultList.appendChild(li);
+    while (els.syncAllResultList.children.length > MAX_SYNC_ALL_HISTORY_ROWS) {
+      els.syncAllResultList.removeChild(els.syncAllResultList.firstElementChild);
+    }
     els.syncAllResultList.scrollTop = els.syncAllResultList.scrollHeight;
   }
 
@@ -1569,6 +1874,12 @@
           failed: data.failed || 0,
           total: data.total || 0,
           success: Boolean(data.success),
+          skippedArchivedProject: Boolean(data.skippedArchivedProject),
+          projectId: data.projectId || null,
+          projectName: data.projectName || null,
+          projectNumber: data.projectNumber || null,
+          phaseName: data.phaseName || null,
+          message: data.message || null,
           fatalError: null,
         };
         if (onComplete) onComplete(data);
@@ -1616,6 +1927,11 @@
     try {
       await syncProjectToSharePoint(state.selected, {
         onStarted: (data) => updateUploadProgress(data.total || 0, 0, 0),
+        onStatus: (data) => {
+          if (data?.stage === 'skipped-archived' || data?.stage === 'checking-project') {
+            setProgress(0, data.message || 'Checking project…');
+          }
+        },
         onFileSuccess: (data) => {
           addResult(data.filename, true);
           updateUploadProgress(data.total, data.succeeded, data.failed);
@@ -1626,6 +1942,10 @@
         },
         onComplete: (data) => {
           updateUploadProgress(data.total || 0, data.succeeded || 0, data.failed || 0);
+          if (data.skippedArchivedProject) {
+            setProgress(100, data.message || 'Skipped archived project');
+            addArchivedSkipResult(data);
+          }
         },
         onError: (data) => {
           setProgress(0, data.error || 'Sync failed');
@@ -1661,60 +1981,118 @@
 
     state.syncAll.processing = true;
     state.syncAll.remainingProjects = projects;
+    saveSyncAllSnapshot();
+    const activeProjects = new Set();
+    let nextIndex = 0;
+
+    function updateActiveProjectSummary() {
+      state.syncAll.activeProjects = [...activeProjects];
+      if (activeProjects.size === 0) {
+        state.syncAll.currentProjectName = '';
+      } else if (activeProjects.size === 1) {
+        state.syncAll.currentProjectName = state.syncAll.activeProjects[0];
+      } else {
+        state.syncAll.currentProjectName = `${activeProjects.size} projects syncing in parallel`;
+      }
+      updateSyncAllControls();
+      updateSyncAllProgressUi();
+    }
+
+    function takeNextProject() {
+      if (nextIndex >= projects.length) {
+        state.syncAll.remainingProjects = [];
+        return null;
+      }
+      const project = projects[nextIndex];
+      nextIndex += 1;
+      state.syncAll.remainingProjects = projects.slice(nextIndex);
+      return project;
+    }
 
     try {
-      for (let i = 0; i < projects.length; i += 1) {
-        const project = projects[i];
-        await waitIfPaused();
+      const workerCount = Math.min(SYNC_ALL_PROJECT_CONCURRENCY, projects.length);
+      const workers = Array.from({ length: workerCount }, () =>
+        (async () => {
+          while (true) {
+            await waitIfPaused();
+            if (state.syncAll.pausedDueToCrash) return;
 
-        state.syncAll.currentProjectName = project.projectName || `Project ${project.projectId}`;
-        state.syncAll.remainingProjects = projects.slice(i);
-        updateSyncAllControls();
-        updateSyncAllProgressUi();
-        addSyncAllHistory(`▶ ${state.syncAll.currentProjectName}`, 'info');
+            const project = takeNextProject();
+            if (!project) return;
+            saveSyncAllSnapshot();
 
-        try {
-          const summary = await syncProjectToSharePoint(project, {
-            onFileSuccess: (data) => {
-              state.syncAll.filesOk += 1;
+            const projectLabel = project.projectName || `Project ${project.projectId}`;
+            activeProjects.add(projectLabel);
+            updateActiveProjectSummary();
+            if (isLikelyArchivedProject(project)) {
+              addSyncAllHistory(`▶ ${projectLabel} (archived — checking…)`, 'archived');
+            } else {
+              addSyncAllHistory(`▶ ${projectLabel}`, 'info');
+            }
+
+            try {
+              const summary = await syncProjectToSharePoint(project, {
+                onFileSuccess: (data) => {
+                  if (data?.skippedAlreadyUploaded || data?.skippedNoExtension) {
+                    state.syncAll.filesSkipped += 1;
+                  } else {
+                    state.syncAll.filesOk += 1;
+                  }
+                  updateSyncAllProgressUi();
+                  addSyncAllHistory(
+                    `  ✓ ${data.filename} (${project.projectName})`,
+                    'success'
+                  );
+                },
+                onFileError: (data) => {
+                  state.syncAll.filesFail += 1;
+                  updateSyncAllProgressUi();
+                  addSyncAllHistory(
+                    `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
+                    'error'
+                  );
+                },
+              });
+
+              state.syncAll.projectsDone += 1;
               updateSyncAllProgressUi();
-              addSyncAllHistory(
-                `  ✓ ${data.filename} (${project.projectName})`,
-                'success'
-              );
-            },
-            onFileError: (data) => {
-              state.syncAll.filesFail += 1;
+              saveSyncAllSnapshot();
+              if (summary.skippedArchivedProject) {
+                state.syncAll.projectsSkippedArchived += 1;
+                updateSyncAllProgressUi();
+                addSyncAllHistory(formatArchivedProjectSkipLine(project, summary), 'archived');
+              } else {
+                addSyncAllHistory(
+                  `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
+                  summary.failed > 0 ? 'error' : 'success'
+                );
+              }
+            } catch (error) {
+              if (isBackendConnectionError(error)) {
+                if (!state.syncAll.pausedDueToCrash) {
+                  const remaining = [project, ...projects.slice(nextIndex)];
+                  pauseSyncAllDueToCrash(error, remaining);
+                }
+                return;
+              }
+
+              state.syncAll.projectsDone += 1;
               updateSyncAllProgressUi();
+              saveSyncAllSnapshot();
               addSyncAllHistory(
-                `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
+                `Failed project: ${project.projectName} — ${error.message}`,
                 'error'
               );
-            },
-          });
-
-          state.syncAll.projectsDone += 1;
-          state.syncAll.remainingProjects = projects.slice(i + 1);
-          updateSyncAllProgressUi();
-          addSyncAllHistory(
-            `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
-            summary.failed > 0 ? 'error' : 'success'
-          );
-        } catch (error) {
-          if (isBackendConnectionError(error)) {
-            pauseSyncAllDueToCrash(error, projects.slice(i));
-            return;
+            } finally {
+              activeProjects.delete(projectLabel);
+              updateActiveProjectSummary();
+            }
           }
+        })()
+      );
 
-          state.syncAll.projectsDone += 1;
-          state.syncAll.remainingProjects = projects.slice(i + 1);
-          updateSyncAllProgressUi();
-          addSyncAllHistory(
-            `Failed project: ${project.projectName} — ${error.message}`,
-            'error'
-          );
-        }
-      }
+      await Promise.all(workers);
+      if (state.syncAll.pausedDueToCrash) return;
 
       finishSyncAll();
     } finally {
@@ -1723,24 +2101,31 @@
   }
 
   function finishSyncAll() {
+    stopSyncAllTimer();
     state.syncAll.currentProjectName = '';
+    state.syncAll.activeProjects = [];
     state.syncAll.paused = false;
     state.syncAll.pausedDueToCrash = false;
     state.syncAll.pauseReason = '';
     state.syncAll.remainingProjects = [];
+    state.syncAll.resumeSnapshot = null;
+    state.syncAll.elapsedMs = 0;
     if (state.syncAll.pauseResolver) {
       state.syncAll.pauseResolver();
       state.syncAll.pauseResolver = null;
     }
     state.syncingAll = false;
     hidePauseNotice();
+    clearSyncAllSnapshot();
     updateSyncButton();
     updateSyncAllControls();
     updateProjectsPager();
     updateSyncAllProgressUi();
     addSyncAllHistory(
-      `Finished all projects · ${state.syncAll.filesOk} files uploaded, ${state.syncAll.filesFail} failed`,
-      state.syncAll.filesFail > 0 ? 'error' : 'success'
+      `Finished all projects · ${state.syncAll.filesOk} uploaded, ${state.syncAll.filesSkipped} files skipped, ${state.syncAll.projectsSkippedArchived} archived projects skipped, ${state.syncAll.filesFail} failed`,
+      state.syncAll.filesFail > 0
+        ? 'error'
+        : (state.syncAll.filesSkipped > 0 || state.syncAll.projectsSkippedArchived > 0 ? 'info' : 'success')
     );
   }
 
@@ -1766,15 +2151,23 @@
       projectsTotal: allProjects.length,
       projectsDone: 0,
       filesOk: 0,
+      filesSkipped: 0,
       filesFail: 0,
+      projectsSkippedArchived: 0,
+      elapsedMs: 0,
+      timerStartedAt: null,
+      timerIntervalId: null,
       currentProjectName: '',
+      activeProjects: [],
       paused: false,
       pausedDueToCrash: false,
       pauseReason: '',
       pauseResolver: null,
       remainingProjects: allProjects,
       processing: false,
+      resumeSnapshot: null,
     };
+    clearSyncAllSnapshot();
 
     updateSyncButton();
     updateSyncAllControls();
@@ -1785,15 +2178,71 @@
     els.syncAllProgressBox.classList.remove('hidden');
     els.syncAllResultList.innerHTML = '';
     updateSyncAllProgressUi();
+    startSyncAllTimer();
     addSyncAllHistory(`Starting sync for ${allProjects.length} project(s)…`, 'info');
 
     await continueSyncAll(allProjects);
+  }
+
+  async function resumeLastSyncAllRun() {
+    if (state.syncing || state.syncingAll || isUploadBlockedBySchedule()) return;
+    const snapshot = getResumeSnapshot();
+    if (!snapshot) {
+      showError('No interrupted sync run found to resume.');
+      updateSyncAllControls();
+      return;
+    }
+
+    const remainingProjects = resolveSnapshotRemainingProjects(snapshot);
+    if (!remainingProjects.length) {
+      showError('Could not restore remaining projects from the saved run.');
+      updateSyncAllControls();
+      return;
+    }
+
+    state.syncingAll = true;
+    state.syncAll = {
+      projectsTotal: Number(snapshot.projectsTotal) || remainingProjects.length + (Number(snapshot.projectsDone) || 0),
+      projectsDone: Number(snapshot.projectsDone) || 0,
+      filesOk: Number(snapshot.filesOk) || 0,
+      filesSkipped: Number(snapshot.filesSkipped) || 0,
+      filesFail: Number(snapshot.filesFail) || 0,
+      projectsSkippedArchived: Number(snapshot.projectsSkippedArchived) || 0,
+      elapsedMs: Number(snapshot.elapsedMs) || 0,
+      timerStartedAt: null,
+      timerIntervalId: null,
+      currentProjectName: '',
+      activeProjects: [],
+      paused: false,
+      pausedDueToCrash: false,
+      pauseReason: '',
+      pauseResolver: null,
+      remainingProjects,
+      processing: false,
+      resumeSnapshot: snapshot,
+    };
+
+    updateSyncButton();
+    updateSyncAllControls();
+    updateProjectsPager();
+    showError('');
+    hidePauseNotice();
+    els.syncAllProgressBox.classList.remove('hidden');
+    updateSyncAllProgressUi();
+    startSyncAllTimer();
+    addSyncAllHistory(
+      `Resuming previous run from ${remainingProjects.length} remaining project(s) at ${snapshot.progressPercent ?? 0}%…`,
+      'info'
+    );
+
+    await continueSyncAll(remainingProjects);
   }
 
   els.syncBtn.addEventListener('click', startSync);
   els.syncAllBtn.addEventListener('click', startSyncAll);
   els.pauseSyncAllBtn.addEventListener('click', pauseSyncAll);
   els.resumeSyncAllBtn.addEventListener('click', resumeSyncAll);
+  els.resumeLastSyncAllBtn.addEventListener('click', resumeLastSyncAllRun);
   els.loginForm.addEventListener('submit', (event) => {
     event.preventDefault();
     handleLogin(false);
@@ -1839,9 +2288,16 @@
   updateSyncAllControls();
   updateRefreshButtons();
 
+  if (getSessionToken()) {
+    refreshResumeSnapshot();
+    updateSyncAllControls();
+  }
+
   (async () => {
     const restored = await restoreSession();
     if (restored) {
+      refreshResumeSnapshot();
+      updateSyncAllControls();
       loadProjects();
     }
   })();

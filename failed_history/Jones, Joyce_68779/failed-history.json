@@ -1,0 +1,63 @@
+{
+  "projectId": "68779",
+  "projectName": "Jones, Joyce",
+  "updatedAt": "2026-07-09T17:16:32.842Z",
+  "failed": [
+    {
+      "documentId": "1036303",
+      "filename": "Jones5.JPG",
+      "folderName": "Photographs",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\Jones5.JPG'",
+      "firstFailedAt": "2026-07-09T17:12:52.998Z",
+      "lastFailedAt": "2026-07-09T17:12:52.998Z"
+    },
+    {
+      "documentId": "1036317",
+      "filename": "Jones1.HEIC",
+      "folderName": "Photographs",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\Jones1.HEIC'",
+      "firstFailedAt": "2026-07-09T17:12:40.347Z",
+      "lastFailedAt": "2026-07-09T17:12:40.347Z"
+    },
+    {
+      "documentId": "1036333",
+      "filename": "Btn_kaichou_on.bmp",
+      "folderName": "Res",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\Btn_kaichou_on.bmp'",
+      "firstFailedAt": "2026-07-09T17:10:29.563Z",
+      "lastFailedAt": "2026-07-09T17:10:29.563Z"
+    },
+    {
+      "documentId": "1036883",
+      "filename": "PDSV.EXE",
+      "folderName": "BIN",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\PDSV.EXE'",
+      "firstFailedAt": "2026-07-09T17:16:32.842Z",
+      "lastFailedAt": "2026-07-09T17:16:32.842Z"
+    },
+    {
+      "documentId": "1037154",
+      "filename": "Jones3.JPG",
+      "folderName": "Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\Jones3.JPG'",
+      "firstFailedAt": "2026-07-09T17:12:41.606Z",
+      "lastFailedAt": "2026-07-09T17:12:41.606Z"
+    },
+    {
+      "documentId": "913029",
+      "filename": "CO Drivers License (Jones, Marylyn).pdf",
+      "folderName": "Fee Agreement",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\CO Drivers License (Jones, Marylyn).pdf'",
+      "firstFailedAt": "2026-07-09T17:12:04.259Z",
+      "lastFailedAt": "2026-07-09T17:12:04.259Z"
+    },
+    {
+      "documentId": "913462",
+      "filename": "PDSV.EXE",
+      "folderName": "BIN",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jones, Joyce_68779\\PDSV.EXE'",
+      "firstFailedAt": "2026-07-09T17:16:30.615Z",
+      "lastFailedAt": "2026-07-09T17:16:30.615Z"
+    }
+  ]
+}

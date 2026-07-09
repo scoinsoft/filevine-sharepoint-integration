@@ -1,0 +1,15 @@
+{
+  "projectId": "68775",
+  "projectName": "Stocking, Eugene",
+  "updatedAt": "2026-07-09T17:22:20.499Z",
+  "failed": [
+    {
+      "documentId": "909408",
+      "filename": "CCHMC 000001-000131.pdf",
+      "folderName": "Medical Records",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Stocking, Eugene_68775\\CCHMC 000001-000131.pdf'",
+      "firstFailedAt": "2026-07-09T17:22:20.498Z",
+      "lastFailedAt": "2026-07-09T17:22:20.498Z"
+    }
+  ]
+}

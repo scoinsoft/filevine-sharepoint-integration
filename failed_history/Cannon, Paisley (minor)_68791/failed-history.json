@@ -1,0 +1,15 @@
+{
+  "projectId": "68791",
+  "projectName": "Cannon, Paisley (minor)",
+  "updatedAt": "2026-07-09T16:33:33.164Z",
+  "failed": [
+    {
+      "documentId": "1042184",
+      "filename": "B-Altitude Pediatrics 000001-000005.pdf",
+      "folderName": "Medical Bills",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Cannon, Paisley (minor)_68791\\B-Altitude Pediatrics 000001-000005.pdf'",
+      "firstFailedAt": "2026-07-09T16:33:33.164Z",
+      "lastFailedAt": "2026-07-09T16:33:33.164Z"
+    }
+  ]
+}

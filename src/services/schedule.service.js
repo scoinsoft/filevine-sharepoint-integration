@@ -279,6 +279,7 @@ async function runScheduledSync() {
           projectName: project.projectName,
           record: {
             success: summary.success,
+            skippedArchivedProject: Boolean(summary.skippedArchivedProject),
             error: summary.error || null,
             counts: summary.counts,
           },

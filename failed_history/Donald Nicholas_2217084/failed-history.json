@@ -1,0 +1,23 @@
+{
+  "projectId": "2217084",
+  "projectName": "Donald Nicholas",
+  "updatedAt": "2026-07-09T13:34:38.696Z",
+  "failed": [
+    {
+      "documentId": "191916059",
+      "filename": "Architect In Health 000001-000033.pdf",
+      "folderName": "Medical Records",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Donald Nicholas_2217084\\Architect In Health 000001-000033.pdf'",
+      "firstFailedAt": "2026-07-09T13:34:38.695Z",
+      "lastFailedAt": "2026-07-09T13:34:38.695Z"
+    },
+    {
+      "documentId": "210176752",
+      "filename": "-43411_12122025_Nathan Nicodemus_CERTIFIED.pdf",
+      "folderName": "Nathan Nicodemus",
+      "error": "Failed to download file from presigned URL (status: n/a): read ECONNRESET",
+      "firstFailedAt": "2026-07-09T13:33:11.505Z",
+      "lastFailedAt": "2026-07-09T13:33:11.505Z"
+    }
+  ]
+}

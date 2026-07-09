@@ -1,0 +1,15 @@
+{
+  "projectId": "1968519",
+  "projectName": "William (Jeff) Farris",
+  "updatedAt": "2026-07-09T14:02:43.425Z",
+  "failed": [
+    {
+      "documentId": "196603230",
+      "filename": "EX B_Corr USAA and Def.pdf",
+      "folderName": "Defendants Initial Disclosure",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\William (Jeff) Farris_1968519\\EX B_Corr USAA and Def.pdf'",
+      "firstFailedAt": "2026-07-09T14:02:43.425Z",
+      "lastFailedAt": "2026-07-09T14:02:43.425Z"
+    }
+  ]
+}

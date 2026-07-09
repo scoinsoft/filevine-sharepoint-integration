@@ -1,0 +1,15 @@
+{
+  "projectId": "68770",
+  "projectName": "Pfalzgraff, Guy",
+  "updatedAt": "2026-07-09T17:34:53.820Z",
+  "failed": [
+    {
+      "documentId": "906448",
+      "filename": "B-CO W ER Phys 000001-000002.pdf",
+      "folderName": "Medical Billing",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Pfalzgraff, Guy_68770\\B-CO W ER Phys 000001-000002.pdf'",
+      "firstFailedAt": "2026-07-09T17:34:53.820Z",
+      "lastFailedAt": "2026-07-09T17:34:53.820Z"
+    }
+  ]
+}

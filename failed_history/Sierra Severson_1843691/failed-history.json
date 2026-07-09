@@ -1,0 +1,15 @@
+{
+  "projectId": "1843691",
+  "projectName": "Sierra Severson",
+  "updatedAt": "2026-07-09T14:22:01.759Z",
+  "failed": [
+    {
+      "documentId": "219729211",
+      "filename": "Ex 1 - Deposition_Notice.pdf",
+      "folderName": "30(b)(6)",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Sierra Severson_1843691\\Ex 1 - Deposition_Notice.pdf'",
+      "firstFailedAt": "2026-07-09T14:22:01.759Z",
+      "lastFailedAt": "2026-07-09T14:22:01.759Z"
+    }
+  ]
+}

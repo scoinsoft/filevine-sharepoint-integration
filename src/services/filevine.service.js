@@ -146,8 +146,15 @@ function normalizeProject(project) {
     projectNumber: project.projectNumber ?? project.number ?? null,
     phaseName: project.phaseName || project.phase?.name || null,
     createdDate: project.createdDate || project.createDate || null,
+    isArchived: project.isArchived === true,
     raw: project,
   };
+}
+
+function hasFileExtension(filename) {
+  const base = path.basename(String(filename || '').trim());
+  const ext = path.extname(base);
+  return ext.length > 1;
 }
 
 function normalizeDocument(document) {
@@ -213,6 +220,18 @@ async function fetchAllPages(client, endpoint, label) {
   }
 
   return collected;
+}
+
+async function getProject(accessToken, projectId) {
+  const client = getApiClient(accessToken);
+
+  try {
+    const response = await client.get(`/projects/${projectId}`);
+    return normalizeProject(response.data || {});
+  } catch (error) {
+    logError('Failed to get project', error);
+    throw formatAxiosError(`Failed to get project ${projectId}`, error);
+  }
 }
 
 async function listProjectsPage(accessToken, options = {}) {
@@ -683,6 +702,7 @@ module.exports = {
   clearCachedToken,
   getProjectFolderLabel,
   listProjectsPage,
+  getProject,
   listDocuments,
   getDownloadLink,
   downloadFromPresignedUrl,
@@ -694,4 +714,5 @@ module.exports = {
   recordFailedUpload,
   clearFailedUpload,
   inspectDocumentMetadata,
+  hasFileExtension,
 };

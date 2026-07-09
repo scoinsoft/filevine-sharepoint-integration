@@ -1,0 +1,31 @@
+{
+  "projectId": "68780",
+  "projectName": "Jesus Jose Gonzalez v. Higgy Investments, Inc. (W.C.)",
+  "updatedAt": "2026-07-09T16:56:37.992Z",
+  "failed": [
+    {
+      "documentId": "1037009",
+      "filename": "2022-11-08 Claimants Hearing Exhibits.pdf",
+      "folderName": "2022-11-10 Gonzalez Hearing",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jesus Jose Gonzalez v. Higgy Investments, Inc. (W.C.)_68780\\2022-11-08 Claimants Hearing Exhibits.pdf'",
+      "firstFailedAt": "2026-07-09T16:56:37.992Z",
+      "lastFailedAt": "2026-07-09T16:56:37.992Z"
+    },
+    {
+      "documentId": "913675",
+      "filename": "2022-11-08 Claimants Hearing Exhibits.pdf",
+      "folderName": "Hearing Exhibits",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jesus Jose Gonzalez v. Higgy Investments, Inc. (W.C.)_68780\\2022-11-08 Claimants Hearing Exhibits.pdf'",
+      "firstFailedAt": "2026-07-09T16:56:37.841Z",
+      "lastFailedAt": "2026-07-09T16:56:37.841Z"
+    },
+    {
+      "documentId": "913765",
+      "filename": "2022-06-08 L Doehling-The Hartford (Claim File Follow up Req.).pdf",
+      "folderName": "Correspondence",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jesus Jose Gonzalez v. Higgy Investments, Inc. (W.C.)_68780\\2022-06-08 L Doehling-The Hartford (Claim File Follow up Req.).pdf'",
+      "firstFailedAt": "2026-07-09T16:56:21.727Z",
+      "lastFailedAt": "2026-07-09T16:56:21.727Z"
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "projectId": "2227455",
+  "projectName": "Logan Boyd (minor)",
+  "updatedAt": "2026-07-09T13:33:42.051Z",
+  "failed": [
+    {
+      "documentId": "173472867",
+      "filename": "Screenshot 2024-09-04 at 7.48.25?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.48.25?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:36.727Z",
+      "lastFailedAt": "2026-07-09T13:33:36.727Z"
+    },
+    {
+      "documentId": "173472869",
+      "filename": "Screenshot 2024-09-04 at 7.49.36?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.49.36?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:37.261Z",
+      "lastFailedAt": "2026-07-09T13:33:37.261Z"
+    },
+    {
+      "documentId": "173472870",
+      "filename": "Screenshot 2024-09-04 at 7.50.33?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.50.33?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:37.744Z",
+      "lastFailedAt": "2026-07-09T13:33:37.744Z"
+    },
+    {
+      "documentId": "173472995",
+      "filename": "Screenshot 2024-09-04 at 7.54.43?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.54.43?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:38.296Z",
+      "lastFailedAt": "2026-07-09T13:33:38.296Z"
+    },
+    {
+      "documentId": "173472996",
+      "filename": "Screenshot 2024-09-04 at 7.55.59?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.55.59?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:38.906Z",
+      "lastFailedAt": "2026-07-09T13:33:38.906Z"
+    },
+    {
+      "documentId": "173473045",
+      "filename": "Screenshot 2024-09-04 at 7.58.02?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.58.02?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:39.533Z",
+      "lastFailedAt": "2026-07-09T13:33:39.533Z"
+    },
+    {
+      "documentId": "173473047",
+      "filename": "Screenshot 2024-09-04 at 7.58.39?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.58.39?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:40.421Z",
+      "lastFailedAt": "2026-07-09T13:33:40.421Z"
+    },
+    {
+      "documentId": "173473121",
+      "filename": "Screenshot 2024-09-04 at 7.59.35?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 7.59.35?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:41.050Z",
+      "lastFailedAt": "2026-07-09T13:33:41.050Z"
+    },
+    {
+      "documentId": "173473123",
+      "filename": "Screenshot 2024-09-04 at 8.00.00?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 8.00.00?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:41.571Z",
+      "lastFailedAt": "2026-07-09T13:33:41.571Z"
+    },
+    {
+      "documentId": "173473124",
+      "filename": "Screenshot 2024-09-04 at 8.00.27?PM.jpg",
+      "folderName": "Documents Received From Client",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, open 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\Screenshot 2024-09-04 at 8.00.27?PM.jpg'",
+      "firstFailedAt": "2026-07-09T13:33:42.051Z",
+      "lastFailedAt": "2026-07-09T13:33:42.051Z"
+    },
+    {
+      "documentId": "209614178",
+      "filename": "2025-12-23 Notice of Hearing - Petition For Approval of Settlement of Claims.pdf",
+      "folderName": "Pleadings",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\2025-12-23 Notice of Hearing - Petition For Approval of Settlement of Claims.pdf'",
+      "firstFailedAt": "2026-07-09T13:32:39.624Z",
+      "lastFailedAt": "2026-07-09T13:32:39.624Z"
+    },
+    {
+      "documentId": "210361129",
+      "filename": "2025-01-06 Order Approving Settlement of Claims Pursuant to CRPP 62.pdf",
+      "folderName": "Pleadings",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Logan Boyd (minor)_2227455\\2025-01-06 Order Approving Settlement of Claims Pursuant to CRPP 62.pdf'",
+      "firstFailedAt": "2026-07-09T13:32:25.518Z",
+      "lastFailedAt": "2026-07-09T13:32:25.518Z"
+    }
+  ]
+}

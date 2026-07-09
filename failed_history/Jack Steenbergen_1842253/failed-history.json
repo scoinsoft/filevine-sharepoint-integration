@@ -1,0 +1,15 @@
+{
+  "projectId": "1842253",
+  "projectName": "Jack Steenbergen",
+  "updatedAt": "2026-07-09T14:25:58.427Z",
+  "failed": [
+    {
+      "documentId": "181209590",
+      "filename": "Photos 000001-000009.pdf",
+      "folderName": "Client Provided",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Jack Steenbergen_1842253\\Photos 000001-000009.pdf'",
+      "firstFailedAt": "2026-07-09T14:25:58.426Z",
+      "lastFailedAt": "2026-07-09T14:25:58.426Z"
+    }
+  ]
+}

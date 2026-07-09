@@ -1,0 +1,31 @@
+{
+  "projectId": "68768",
+  "projectName": "Woods, Easton",
+  "updatedAt": "2026-07-09T17:55:39.798Z",
+  "failed": [
+    {
+      "documentId": "147651324",
+      "filename": "GVPC 000001-000018.pdf",
+      "folderName": "Initial Disclosures",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Woods, Easton_68768\\GVPC 000001-000018.pdf'",
+      "firstFailedAt": "2026-07-09T17:55:39.798Z",
+      "lastFailedAt": "2026-07-09T17:55:39.798Z"
+    },
+    {
+      "documentId": "159556630",
+      "filename": "5. PCP 000001-000124.pdf",
+      "folderName": "Documents Sent to Dr. Reinhard",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Woods, Easton_68768\\5. PCP 000001-000124.pdf'",
+      "firstFailedAt": "2026-07-09T17:50:10.848Z",
+      "lastFailedAt": "2026-07-09T17:50:10.848Z"
+    },
+    {
+      "documentId": "191204366",
+      "filename": "6. RMOA 000001-000027.pdf",
+      "folderName": "Docs sent to Dr. Ceola",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Woods, Easton_68768\\6. RMOA 000001-000027.pdf'",
+      "firstFailedAt": "2026-07-09T17:50:06.627Z",
+      "lastFailedAt": "2026-07-09T17:50:06.627Z"
+    }
+  ]
+}

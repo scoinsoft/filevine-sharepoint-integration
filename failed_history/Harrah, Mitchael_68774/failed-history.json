@@ -1,0 +1,295 @@
+{
+  "projectId": "68774",
+  "projectName": "Harrah, Mitchael",
+  "updatedAt": "2026-07-09T17:40:41.583Z",
+  "failed": [
+    {
+      "documentId": "1030482",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:27:29.614Z",
+      "lastFailedAt": "2026-07-09T17:27:29.614Z"
+    },
+    {
+      "documentId": "1030531",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0005",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:27:30.850Z",
+      "lastFailedAt": "2026-07-09T17:27:30.850Z"
+    },
+    {
+      "documentId": "1030547",
+      "filename": "IM000015.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000015.JPG'",
+      "firstFailedAt": "2026-07-09T17:34:34.652Z",
+      "lastFailedAt": "2026-07-09T17:34:34.652Z"
+    },
+    {
+      "documentId": "1030587",
+      "filename": "IM000004.JPG",
+      "folderName": "AMSE0002",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000004.JPG'",
+      "firstFailedAt": "2026-07-09T17:28:25.942Z",
+      "lastFailedAt": "2026-07-09T17:28:25.942Z"
+    },
+    {
+      "documentId": "1030606",
+      "filename": "IM000013.JPG",
+      "folderName": "AMSE0006",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000013.JPG'",
+      "firstFailedAt": "2026-07-09T17:33:54.784Z",
+      "lastFailedAt": "2026-07-09T17:33:54.784Z"
+    },
+    {
+      "documentId": "1030622",
+      "filename": "IM000011.JPG",
+      "folderName": "AMSE0005",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000011.JPG'",
+      "firstFailedAt": "2026-07-09T17:33:21.334Z",
+      "lastFailedAt": "2026-07-09T17:33:21.334Z"
+    },
+    {
+      "documentId": "1030640",
+      "filename": "IM000043.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000043.JPG'",
+      "firstFailedAt": "2026-07-09T17:40:41.583Z",
+      "lastFailedAt": "2026-07-09T17:40:41.583Z"
+    },
+    {
+      "documentId": "1030726",
+      "filename": "IM000007.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000007.JPG'",
+      "firstFailedAt": "2026-07-09T17:29:54.799Z",
+      "lastFailedAt": "2026-07-09T17:29:54.799Z"
+    },
+    {
+      "documentId": "1031128",
+      "filename": "AMSE0006-1.htm",
+      "folderName": "AMSE0006",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\AMSE0006-1.htm'",
+      "firstFailedAt": "2026-07-09T17:24:35.740Z",
+      "lastFailedAt": "2026-07-09T17:24:35.740Z"
+    },
+    {
+      "documentId": "1031331",
+      "filename": "IM000007.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000007.JPG'",
+      "firstFailedAt": "2026-07-09T17:29:25.946Z",
+      "lastFailedAt": "2026-07-09T17:29:25.946Z"
+    },
+    {
+      "documentId": "1031448",
+      "filename": "IM000027.JPG",
+      "folderName": "AMSE0002",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000027.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:32.180Z",
+      "lastFailedAt": "2026-07-09T17:39:32.180Z"
+    },
+    {
+      "documentId": "1031460",
+      "filename": "IM000006.JPG",
+      "folderName": "AMSE0002",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000006.JPG'",
+      "firstFailedAt": "2026-07-09T17:29:04.483Z",
+      "lastFailedAt": "2026-07-09T17:29:04.483Z"
+    },
+    {
+      "documentId": "1031807",
+      "filename": "IM000018.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000018.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:24.743Z",
+      "lastFailedAt": "2026-07-09T17:35:24.743Z"
+    },
+    {
+      "documentId": "1031853",
+      "filename": "IM000012.JPG",
+      "folderName": "AMSE0007",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000012.JPG'",
+      "firstFailedAt": "2026-07-09T17:33:35.406Z",
+      "lastFailedAt": "2026-07-09T17:33:35.406Z"
+    },
+    {
+      "documentId": "1031897",
+      "filename": "IM000025.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000025.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:22.052Z",
+      "lastFailedAt": "2026-07-09T17:39:22.052Z"
+    },
+    {
+      "documentId": "906889",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:27:22.653Z",
+      "lastFailedAt": "2026-07-09T17:27:22.653Z"
+    },
+    {
+      "documentId": "907130",
+      "filename": "IM000024.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000024.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:15.677Z",
+      "lastFailedAt": "2026-07-09T17:39:15.677Z"
+    },
+    {
+      "documentId": "907133",
+      "filename": "IM000018.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000018.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:28.303Z",
+      "lastFailedAt": "2026-07-09T17:35:28.303Z"
+    },
+    {
+      "documentId": "907187",
+      "filename": "IM000017.JPG",
+      "folderName": "AMSE0007",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000017.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:01.364Z",
+      "lastFailedAt": "2026-07-09T17:35:01.364Z"
+    },
+    {
+      "documentId": "907293",
+      "filename": "IM000013.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000013.JPG'",
+      "firstFailedAt": "2026-07-09T17:33:54.160Z",
+      "lastFailedAt": "2026-07-09T17:33:54.160Z"
+    },
+    {
+      "documentId": "907323",
+      "filename": "IM000025.JPG",
+      "folderName": "AMSE0002",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000025.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:24.095Z",
+      "lastFailedAt": "2026-07-09T17:39:24.095Z"
+    },
+    {
+      "documentId": "907559",
+      "filename": "IM000014.JPG",
+      "folderName": "AMSE0007",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000014.JPG'",
+      "firstFailedAt": "2026-07-09T17:34:05.421Z",
+      "lastFailedAt": "2026-07-09T17:34:05.421Z"
+    },
+    {
+      "documentId": "907569",
+      "filename": "IM000016.JPG",
+      "folderName": "AMSE0006",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000016.JPG'",
+      "firstFailedAt": "2026-07-09T17:34:49.205Z",
+      "lastFailedAt": "2026-07-09T17:34:49.205Z"
+    },
+    {
+      "documentId": "907610",
+      "filename": "IM000025.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000025.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:22.592Z",
+      "lastFailedAt": "2026-07-09T17:39:22.592Z"
+    },
+    {
+      "documentId": "907613",
+      "filename": "IM000019.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000019.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:34.287Z",
+      "lastFailedAt": "2026-07-09T17:35:34.287Z"
+    },
+    {
+      "documentId": "907885",
+      "filename": "IM000009.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000009.JPG'",
+      "firstFailedAt": "2026-07-09T17:30:35.284Z",
+      "lastFailedAt": "2026-07-09T17:30:35.284Z"
+    },
+    {
+      "documentId": "908033",
+      "filename": "AMSE0003-1.htm",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\AMSE0003-1.htm'",
+      "firstFailedAt": "2026-07-09T17:24:27.082Z",
+      "lastFailedAt": "2026-07-09T17:24:27.082Z"
+    },
+    {
+      "documentId": "908270",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:27:22.159Z",
+      "lastFailedAt": "2026-07-09T17:27:22.159Z"
+    },
+    {
+      "documentId": "908280",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:25:58.512Z",
+      "lastFailedAt": "2026-07-09T17:25:58.512Z"
+    },
+    {
+      "documentId": "908362",
+      "filename": "IM000020.JPG",
+      "folderName": "AMSE0006",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000020.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:57.504Z",
+      "lastFailedAt": "2026-07-09T17:35:57.504Z"
+    },
+    {
+      "documentId": "908427",
+      "filename": "IM000028.JPG",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000028.JPG'",
+      "firstFailedAt": "2026-07-09T17:39:36.694Z",
+      "lastFailedAt": "2026-07-09T17:39:36.694Z"
+    },
+    {
+      "documentId": "908468",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0004",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:25:37.941Z",
+      "lastFailedAt": "2026-07-09T17:25:37.941Z"
+    },
+    {
+      "documentId": "908471",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0002",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:25:39.528Z",
+      "lastFailedAt": "2026-07-09T17:25:39.528Z"
+    },
+    {
+      "documentId": "908472",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:25:39.261Z",
+      "lastFailedAt": "2026-07-09T17:25:39.261Z"
+    },
+    {
+      "documentId": "908579",
+      "filename": "IM000001.JPG",
+      "folderName": "AMSE0001",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\IM000001.JPG'",
+      "firstFailedAt": "2026-07-09T17:25:39.275Z",
+      "lastFailedAt": "2026-07-09T17:25:39.275Z"
+    },
+    {
+      "documentId": "909376",
+      "filename": "AMSE0003-1.htm",
+      "folderName": "AMSE0003",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Harrah, Mitchael_68774\\AMSE0003-1.htm'",
+      "firstFailedAt": "2026-07-09T17:24:23.082Z",
+      "lastFailedAt": "2026-07-09T17:24:23.082Z"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "projectId": "68803",
+  "projectName": "Johnson, Rhonda",
+  "updatedAt": "2026-07-09T16:15:14.542Z",
+  "failed": [
+    {
+      "documentId": "48455230",
+      "filename": "Western Ortho & Sports Med 000001-000032(1).pdf",
+      "folderName": "Demand Attachments",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Johnson, Rhonda_68803\\Western Ortho & Sports Med 000001-000032(1).pdf'",
+      "firstFailedAt": "2026-07-09T16:15:14.542Z",
+      "lastFailedAt": "2026-07-09T16:15:14.542Z"
+    },
+    {
+      "documentId": "81414563",
+      "filename": "Johnson, Rhonda - Fall at Sams Club 8.29.22.zip",
+      "folderName": "Copy of File",
+      "error": "read ECONNRESET",
+      "firstFailedAt": "2026-07-09T16:14:29.882Z",
+      "lastFailedAt": "2026-07-09T16:14:29.882Z"
+    },
+    {
+      "documentId": "926313",
+      "filename": "Manager Statement.jpg",
+      "folderName": "Liability",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Johnson, Rhonda_68803\\Manager Statement.jpg'",
+      "firstFailedAt": "2026-07-09T16:14:24.876Z",
+      "lastFailedAt": "2026-07-09T16:14:24.876Z"
+    }
+  ]
+}

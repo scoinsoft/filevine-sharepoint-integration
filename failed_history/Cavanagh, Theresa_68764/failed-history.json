@@ -1,0 +1,39 @@
+{
+  "projectId": "68764",
+  "projectName": "Cavanagh, Theresa",
+  "updatedAt": "2026-07-09T18:04:33.972Z",
+  "failed": [
+    {
+      "documentId": "1026260",
+      "filename": "B-Juniper Fam Med 000001-000002.pdf",
+      "folderName": "Medical Bills",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Cavanagh, Theresa_68764\\B-Juniper Fam Med 000001-000002.pdf'",
+      "firstFailedAt": "2026-07-09T18:04:09.797Z",
+      "lastFailedAt": "2026-07-09T18:04:09.797Z"
+    },
+    {
+      "documentId": "28217101",
+      "filename": "B-WCRA 000003-000003.pdf",
+      "folderName": "Demand Attachments (2023-05-25)",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Cavanagh, Theresa_68764\\B-WCRA 000003-000003.pdf'",
+      "firstFailedAt": "2026-07-09T18:04:16.241Z",
+      "lastFailedAt": "2026-07-09T18:04:16.241Z"
+    },
+    {
+      "documentId": "902698",
+      "filename": "B-WCRA 000001-000002.pdf",
+      "folderName": "Medical Bills",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Cavanagh, Theresa_68764\\B-WCRA 000001-000002.pdf'",
+      "firstFailedAt": "2026-07-09T18:04:33.972Z",
+      "lastFailedAt": "2026-07-09T18:04:33.972Z"
+    },
+    {
+      "documentId": "902830",
+      "filename": "2022-11-30 L Conduent-Doehling.pdf",
+      "folderName": "Correspondence",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Cavanagh, Theresa_68764\\2022-11-30 L Conduent-Doehling.pdf'",
+      "firstFailedAt": "2026-07-09T18:03:02.620Z",
+      "lastFailedAt": "2026-07-09T18:03:02.620Z"
+    }
+  ]
+}

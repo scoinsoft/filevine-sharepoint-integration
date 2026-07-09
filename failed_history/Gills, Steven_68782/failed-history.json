@@ -1,0 +1,319 @@
+{
+  "projectId": "68782",
+  "projectName": "Gills, Steven",
+  "updatedAt": "2026-07-09T17:56:47.118Z",
+  "failed": [
+    {
+      "documentId": "1037450",
+      "filename": "(Extraction_1.1)_zh1-2.png",
+      "folderName": "zh1",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\(Extraction_1.1)_zh1-2.png'",
+      "firstFailedAt": "2026-07-09T16:59:00.425Z",
+      "lastFailedAt": "2026-07-09T16:59:00.425Z"
+    },
+    {
+      "documentId": "1037478",
+      "filename": "2022-00015937-1459723.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459723.JPG'",
+      "firstFailedAt": "2026-07-09T17:44:09.144Z",
+      "lastFailedAt": "2026-07-09T17:44:09.144Z"
+    },
+    {
+      "documentId": "1037487",
+      "filename": "2022-00015937-1459710.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459710.JPG'",
+      "firstFailedAt": "2026-07-09T17:41:40.346Z",
+      "lastFailedAt": "2026-07-09T17:41:40.346Z"
+    },
+    {
+      "documentId": "1037508",
+      "filename": "2022-00015937-1459665.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459665.JPG'",
+      "firstFailedAt": "2026-07-09T17:35:47.187Z",
+      "lastFailedAt": "2026-07-09T17:35:47.187Z"
+    },
+    {
+      "documentId": "1037509",
+      "filename": "2022-00015937-1459664.CR2",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459664.CR2'",
+      "firstFailedAt": "2026-07-09T17:35:42.355Z",
+      "lastFailedAt": "2026-07-09T17:35:42.355Z"
+    },
+    {
+      "documentId": "1037512",
+      "filename": "2022-00015937-1459660.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459660.CR2'",
+      "firstFailedAt": "2026-07-09T17:35:58.840Z",
+      "lastFailedAt": "2026-07-09T17:35:58.840Z"
+    },
+    {
+      "documentId": "1037517",
+      "filename": "2022-00015937-1459652.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459652.CR2'",
+      "firstFailedAt": "2026-07-09T17:34:30.284Z",
+      "lastFailedAt": "2026-07-09T17:34:30.284Z"
+    },
+    {
+      "documentId": "1037529",
+      "filename": "2022-00015937-1459632.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459632.CR2'",
+      "firstFailedAt": "2026-07-09T17:30:36.586Z",
+      "lastFailedAt": "2026-07-09T17:30:36.586Z"
+    },
+    {
+      "documentId": "1037537",
+      "filename": "2022-00015937-1459619.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459619.JPG'",
+      "firstFailedAt": "2026-07-09T17:28:12.886Z",
+      "lastFailedAt": "2026-07-09T17:28:12.886Z"
+    },
+    {
+      "documentId": "1037538",
+      "filename": "2022-00015937-1459618.CR2",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459618.CR2'",
+      "firstFailedAt": "2026-07-09T17:27:51.851Z",
+      "lastFailedAt": "2026-07-09T17:27:51.851Z"
+    },
+    {
+      "documentId": "1037539",
+      "filename": "2022-00015937-1459616.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459616.CR2'",
+      "firstFailedAt": "2026-07-09T17:28:09.044Z",
+      "lastFailedAt": "2026-07-09T17:28:09.044Z"
+    },
+    {
+      "documentId": "1037585",
+      "filename": "2022-00015937-1459531.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459531.JPG'",
+      "firstFailedAt": "2026-07-09T17:17:40.939Z",
+      "lastFailedAt": "2026-07-09T17:17:40.939Z"
+    },
+    {
+      "documentId": "1037594",
+      "filename": "2022-00015937-1459511.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459511.JPG'",
+      "firstFailedAt": "2026-07-09T17:15:06.871Z",
+      "lastFailedAt": "2026-07-09T17:15:06.871Z"
+    },
+    {
+      "documentId": "1037598",
+      "filename": "2022-00015937-1459506.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459506.JPG'",
+      "firstFailedAt": "2026-07-09T17:13:29.117Z",
+      "lastFailedAt": "2026-07-09T17:13:29.117Z"
+    },
+    {
+      "documentId": "1037685",
+      "filename": "2022-00015937-1460362.jpg",
+      "folderName": "kb1",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460362.jpg'",
+      "firstFailedAt": "2026-07-09T17:50:40.604Z",
+      "lastFailedAt": "2026-07-09T17:50:40.604Z"
+    },
+    {
+      "documentId": "1037697",
+      "filename": "2022-00015937-1460343.jpg",
+      "folderName": "kb1",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460343.jpg'",
+      "firstFailedAt": "2026-07-09T17:49:41.392Z",
+      "lastFailedAt": "2026-07-09T17:49:41.392Z"
+    },
+    {
+      "documentId": "178453404",
+      "filename": "2022-00015937-1459378.JPG",
+      "folderName": "Police Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459378.JPG'",
+      "firstFailedAt": "2026-07-09T17:02:25.385Z",
+      "lastFailedAt": "2026-07-09T17:02:25.385Z"
+    },
+    {
+      "documentId": "178453966",
+      "filename": "2022-00015937-1459417.JPG",
+      "folderName": "Police Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459417.JPG'",
+      "firstFailedAt": "2026-07-09T17:04:44.802Z",
+      "lastFailedAt": "2026-07-09T17:04:44.802Z"
+    },
+    {
+      "documentId": "178455091",
+      "filename": "2022-00015937-1459479.JPG",
+      "folderName": "Police Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459479.JPG'",
+      "firstFailedAt": "2026-07-09T17:12:00.372Z",
+      "lastFailedAt": "2026-07-09T17:12:00.372Z"
+    },
+    {
+      "documentId": "178457625",
+      "filename": "2022-00015937-1459590.CR2",
+      "folderName": "Police Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459590.CR2'",
+      "firstFailedAt": "2026-07-09T17:28:45.845Z",
+      "lastFailedAt": "2026-07-09T17:28:45.845Z"
+    },
+    {
+      "documentId": "178462444",
+      "filename": "2022-00015937-1460326.jpg",
+      "folderName": "Police Photos",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460326.jpg'",
+      "firstFailedAt": "2026-07-09T17:47:08.603Z",
+      "lastFailedAt": "2026-07-09T17:47:08.603Z"
+    },
+    {
+      "documentId": "178639888",
+      "filename": "2022-00015937-1460773.avi",
+      "folderName": "Liquor Barn Video",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460773.avi'",
+      "firstFailedAt": "2026-07-09T17:56:47.118Z",
+      "lastFailedAt": "2026-07-09T17:56:47.118Z"
+    },
+    {
+      "documentId": "913415",
+      "filename": "2022-00015937-1460374.jpg",
+      "folderName": "kb1",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460374.jpg'",
+      "firstFailedAt": "2026-07-09T17:51:10.864Z",
+      "lastFailedAt": "2026-07-09T17:51:10.864Z"
+    },
+    {
+      "documentId": "914171",
+      "filename": "2022-00015937-1459744.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459744.JPG'",
+      "firstFailedAt": "2026-07-09T17:45:05.337Z",
+      "lastFailedAt": "2026-07-09T17:45:05.337Z"
+    },
+    {
+      "documentId": "914201",
+      "filename": "2022-00015937-1459674.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459674.CR2'",
+      "firstFailedAt": "2026-07-09T17:37:36.431Z",
+      "lastFailedAt": "2026-07-09T17:37:36.431Z"
+    },
+    {
+      "documentId": "914203",
+      "filename": "2022-00015937-1459670.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459670.CR2'",
+      "firstFailedAt": "2026-07-09T17:36:23.701Z",
+      "lastFailedAt": "2026-07-09T17:36:23.701Z"
+    },
+    {
+      "documentId": "914207",
+      "filename": "2022-00015937-1459666.CR2",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459666.CR2'",
+      "firstFailedAt": "2026-07-09T17:35:49.931Z",
+      "lastFailedAt": "2026-07-09T17:35:49.931Z"
+    },
+    {
+      "documentId": "914208",
+      "filename": "2022-00015937-1459662.CR2",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459662.CR2'",
+      "firstFailedAt": "2026-07-09T17:35:45.899Z",
+      "lastFailedAt": "2026-07-09T17:35:45.899Z"
+    },
+    {
+      "documentId": "914213",
+      "filename": "2022-00015937-1459646.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459646.CR2'",
+      "firstFailedAt": "2026-07-09T17:33:35.499Z",
+      "lastFailedAt": "2026-07-09T17:33:35.499Z"
+    },
+    {
+      "documentId": "914221",
+      "filename": "2022-00015937-1459628.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459628.CR2'",
+      "firstFailedAt": "2026-07-09T17:29:59.826Z",
+      "lastFailedAt": "2026-07-09T17:29:59.826Z"
+    },
+    {
+      "documentId": "914237",
+      "filename": "2022-00015937-1459586.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459586.CR2'",
+      "firstFailedAt": "2026-07-09T17:22:52.916Z",
+      "lastFailedAt": "2026-07-09T17:22:52.916Z"
+    },
+    {
+      "documentId": "914238",
+      "filename": "2022-00015937-1459584.CR2",
+      "folderName": "kc10",
+      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459584.CR2'",
+      "firstFailedAt": "2026-07-09T17:22:52.806Z",
+      "lastFailedAt": "2026-07-09T17:22:52.806Z"
+    },
+    {
+      "documentId": "914258",
+      "filename": "2022-00015937-1459542.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459542.JPG'",
+      "firstFailedAt": "2026-07-09T17:20:21.019Z",
+      "lastFailedAt": "2026-07-09T17:20:21.019Z"
+    },
+    {
+      "documentId": "914261",
+      "filename": "2022-00015937-1459537.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459537.JPG'",
+      "firstFailedAt": "2026-07-09T17:19:11.502Z",
+      "lastFailedAt": "2026-07-09T17:19:11.502Z"
+    },
+    {
+      "documentId": "914271",
+      "filename": "2022-00015937-1459520.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459520.JPG'",
+      "firstFailedAt": "2026-07-09T17:15:45.350Z",
+      "lastFailedAt": "2026-07-09T17:15:45.350Z"
+    },
+    {
+      "documentId": "914277",
+      "filename": "2022-00015937-1459504.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459504.JPG'",
+      "firstFailedAt": "2026-07-09T17:13:13.429Z",
+      "lastFailedAt": "2026-07-09T17:13:13.429Z"
+    },
+    {
+      "documentId": "914287",
+      "filename": "2022-00015937-1459487.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459487.JPG'",
+      "firstFailedAt": "2026-07-09T17:13:12.848Z",
+      "lastFailedAt": "2026-07-09T17:13:12.848Z"
+    },
+    {
+      "documentId": "914322",
+      "filename": "2022-00015937-1459424.JPG",
+      "folderName": "kc10",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1459424.JPG'",
+      "firstFailedAt": "2026-07-09T17:07:22.460Z",
+      "lastFailedAt": "2026-07-09T17:07:22.460Z"
+    },
+    {
+      "documentId": "914366",
+      "filename": "2022-00015937-1460377.jpg",
+      "folderName": "kb1",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Gills, Steven_68782\\2022-00015937-1460377.jpg'",
+      "firstFailedAt": "2026-07-09T17:51:23.088Z",
+      "lastFailedAt": "2026-07-09T17:51:23.088Z"
+    }
+  ]
+}

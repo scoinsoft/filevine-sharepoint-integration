@@ -1,0 +1,23 @@
+{
+  "projectId": "68783",
+  "projectName": "Nelson, Jolene",
+  "updatedAt": "2026-07-09T17:11:20.762Z",
+  "failed": [
+    {
+      "documentId": "192153226",
+      "filename": "WCHC 000001-000007.pdf",
+      "folderName": "Medical Records",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Nelson, Jolene_68783\\WCHC 000001-000007.pdf'",
+      "firstFailedAt": "2026-07-09T17:11:20.761Z",
+      "lastFailedAt": "2026-07-09T17:11:20.761Z"
+    },
+    {
+      "documentId": "205038995",
+      "filename": "MindPolish 000001-000010.pdf",
+      "folderName": "Initial Disclosures",
+      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Nelson, Jolene_68783\\MindPolish 000001-000010.pdf'",
+      "firstFailedAt": "2026-07-09T17:07:26.553Z",
+      "lastFailedAt": "2026-07-09T17:07:26.553Z"
+    }
+  ]
+}

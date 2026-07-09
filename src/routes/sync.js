@@ -45,12 +45,13 @@ router.get('/projects', async (req, res) => {
       limit: page.limit,
       loadedTo: page.offset + page.projects.length,
       hasMore: page.hasMore,
-      projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate }) => ({
+      projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate, isArchived }) => ({
         projectId,
         projectName,
         projectNumber,
         phaseName,
         createdDate,
+        isArchived,
       })),
     });
   } catch (error) {
