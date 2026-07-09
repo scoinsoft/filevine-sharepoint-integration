@@ -19,6 +19,13 @@ const SYNC_LARGE_FILE_MB = readPositiveIntEnv('SYNC_LARGE_FILE_MB', 25);
 const SYNC_LARGE_FILE_CONCURRENCY = readPositiveIntEnv('SYNC_LARGE_FILE_CONCURRENCY', 1);
 const LARGE_FILE_BYTES = SYNC_LARGE_FILE_MB * 1024 * 1024;
 
+function isUnauthorizedError(error) {
+  const status = error?.response?.status;
+  if (status === 401) return true;
+  const message = String(error?.message || '');
+  return message.includes('status: 401') || message.includes('status code 401');
+}
+
 async function listAllProjects() {
   const accessToken = await filevineService.authenticate();
   const projects = [];
@@ -74,7 +81,36 @@ async function syncProject(projectId, projectName, options = {}) {
       message: 'Connecting to Filevine…',
     });
 
-    const accessToken = await filevineService.authenticate();
+    let accessToken = await filevineService.authenticate();
+    let refreshingTokenPromise = null;
+
+    async function refreshAccessToken() {
+      if (!refreshingTokenPromise) {
+        refreshingTokenPromise = (async () => {
+          filevineService.clearCachedToken();
+          const fresh = await filevineService.authenticate();
+          log('Refreshed Filevine access token after 401', { projectId, projectName });
+          return fresh;
+        })().finally(() => {
+          refreshingTokenPromise = null;
+        });
+      }
+      accessToken = await refreshingTokenPromise;
+      return accessToken;
+    }
+
+    async function withTokenRetry(operationName, operation) {
+      try {
+        return await operation(accessToken);
+      } catch (error) {
+        if (!isUnauthorizedError(error)) {
+          throw error;
+        }
+        log(`${operationName} received 401, refreshing token and retrying`, { projectId, projectName });
+        const freshToken = await refreshAccessToken();
+        return operation(freshToken);
+      }
+    }
 
     emit('status', {
       stage: 'listing',
@@ -83,7 +119,9 @@ async function syncProject(projectId, projectName, options = {}) {
       projectName,
     });
 
-    const documents = await filevineService.listDocuments(accessToken, projectId);
+    const documents = await withTokenRetry('listDocuments', (token) =>
+      filevineService.listDocuments(token, projectId)
+    );
     total = documents.length;
 
     emit('started', {
@@ -119,6 +157,8 @@ async function syncProject(projectId, projectName, options = {}) {
     const manifest = filevineService.readProjectUploadManifest(projectId, projectName);
     const uploadedDocumentIds = manifest.uploadedDocumentIds;
     const uploadedFilenames = manifest.uploadedFilenames;
+    const failedHistory = filevineService.readFailedUploadHistory(projectId, projectName);
+    const failedByDocumentId = failedHistory.failedByDocumentId;
 
     let nextIndex = 0;
     const largeUploadGate = new Semaphore(SYNC_LARGE_FILE_CONCURRENCY);
@@ -223,12 +263,14 @@ async function syncProject(projectId, projectName, options = {}) {
       });
 
       try {
-        const download = await filevineService.downloadDocument(
-          accessToken,
-          document.documentId,
-          document.filename,
-          projectId,
-          projectName
+        const download = await withTokenRetry('downloadDocument', (token) =>
+          filevineService.downloadDocument(
+            token,
+            document.documentId,
+            document.filename,
+            projectId,
+            projectName
+          )
         );
         localFilePath = download.filePath;
 
@@ -263,13 +305,19 @@ async function syncProject(projectId, projectName, options = {}) {
         filevineService.deleteLocalDownload(download.filePath);
         localFilePath = null;
 
-        filevineService.recordProjectUploadSuccess(
+        await filevineService.recordProjectUploadSuccess(
           projectId,
           projectName,
           document.documentId,
           download.filename,
           uploadedDocumentIds,
           uploadedFilenames
+        );
+        await filevineService.clearFailedUpload(
+          projectId,
+          projectName,
+          document.documentId,
+          failedByDocumentId
         );
 
         const successItem = {
@@ -300,6 +348,12 @@ async function syncProject(projectId, projectName, options = {}) {
           error: error.message,
         };
         results.failed.push(failItem);
+        await filevineService.recordFailedUpload(
+          projectId,
+          projectName,
+          failItem,
+          failedByDocumentId
+        );
 
         emit('file-error', {
           ...failItem,

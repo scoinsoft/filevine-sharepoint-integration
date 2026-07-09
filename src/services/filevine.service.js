@@ -62,6 +62,19 @@ function ensureUploadHistoryDir(projectId, projectName) {
   return historyDir;
 }
 
+function ensureFailedHistoryDir(projectId, projectName) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for failed history path');
+  }
+
+  const historyDir = path.join(process.cwd(), 'failed_history', folderLabel);
+  if (!fs.existsSync(historyDir)) {
+    fs.mkdirSync(historyDir, { recursive: true });
+  }
+  return historyDir;
+}
+
 function getLegacyUploadManifestPath(projectId, projectName) {
   return path.join(ensureDownloadsDir(projectId, projectName), 'uploaded-success.json');
 }
@@ -378,6 +391,120 @@ function readProjectUploadManifest(projectId, projectName) {
 }
 
 let manifestWriteChain = Promise.resolve();
+const failedHistoryWriteChains = new Map();
+
+function getFailedHistoryPath(projectId, projectName) {
+  return path.join(ensureFailedHistoryDir(projectId, projectName), 'failed-history.json');
+}
+
+function readFailedUploadHistory(projectId, projectName) {
+  const historyPath = getFailedHistoryPath(projectId, projectName);
+  if (!fs.existsSync(historyPath)) {
+    return {
+      historyPath,
+      failedByDocumentId: new Map(),
+    };
+  }
+
+  try {
+    const raw = fs.readFileSync(historyPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed?.failed) ? parsed.failed : [];
+    const failedByDocumentId = new Map();
+    for (const entry of entries) {
+      const key = String(entry?.documentId ?? '');
+      if (!key) continue;
+      failedByDocumentId.set(key, {
+        documentId: key,
+        filename: entry.filename || null,
+        folderName: entry.folderName || null,
+        error: entry.error || 'Unknown error',
+        firstFailedAt: entry.firstFailedAt || new Date().toISOString(),
+        lastFailedAt: entry.lastFailedAt || new Date().toISOString(),
+      });
+    }
+    return { historyPath, failedByDocumentId };
+  } catch (error) {
+    logError('Failed to read failed history (starting fresh)', error);
+    return {
+      historyPath,
+      failedByDocumentId: new Map(),
+    };
+  }
+}
+
+function queueFailedHistoryWrite(projectId, projectName, writer) {
+  const key = getProjectFolderLabel(projectId, projectName) || String(projectId);
+  const chain = failedHistoryWriteChains.get(key) || Promise.resolve();
+
+  const next = chain
+    .then(() => writer())
+    .catch((error) => {
+      logError('Failed to update failed history', error);
+      return null;
+    });
+
+  failedHistoryWriteChains.set(
+    key,
+    next.finally(() => {
+      if (failedHistoryWriteChains.get(key) === next) {
+        failedHistoryWriteChains.delete(key);
+      }
+    })
+  );
+
+  return next;
+}
+
+function writeFailedHistoryFile(projectId, projectName, failedByDocumentId) {
+  const historyPath = getFailedHistoryPath(projectId, projectName);
+  const payload = {
+    projectId: String(projectId),
+    projectName,
+    updatedAt: new Date().toISOString(),
+    failed: [...failedByDocumentId.values()].sort((a, b) => String(a.documentId).localeCompare(String(b.documentId))),
+  };
+  fs.writeFileSync(historyPath, JSON.stringify(payload, null, 2), 'utf8');
+  return historyPath;
+}
+
+function recordFailedUpload(projectId, projectName, failItem, failedByDocumentId) {
+  const documentKey = String(failItem?.documentId ?? '');
+  if (!documentKey) {
+    return Promise.resolve(null);
+  }
+
+  const existing = failedByDocumentId.get(documentKey);
+  const now = new Date().toISOString();
+  failedByDocumentId.set(documentKey, {
+    documentId: documentKey,
+    filename: failItem?.filename || existing?.filename || null,
+    folderName: failItem?.folderName || existing?.folderName || null,
+    error: failItem?.error || 'Unknown error',
+    firstFailedAt: existing?.firstFailedAt || now,
+    lastFailedAt: now,
+  });
+
+  return queueFailedHistoryWrite(projectId, projectName, () =>
+    writeFailedHistoryFile(projectId, projectName, failedByDocumentId)
+  );
+}
+
+function clearFailedUpload(projectId, projectName, documentId, failedByDocumentId) {
+  const documentKey = String(documentId ?? '');
+  if (!documentKey) {
+    return Promise.resolve(null);
+  }
+
+  if (!failedByDocumentId.has(documentKey)) {
+    return Promise.resolve(null);
+  }
+
+  failedByDocumentId.delete(documentKey);
+  return queueFailedHistoryWrite(projectId, projectName, () =>
+    writeFailedHistoryFile(projectId, projectName, failedByDocumentId)
+  );
+}
 
 function recordProjectUploadSuccess(
   projectId,
@@ -563,5 +690,8 @@ module.exports = {
   deleteLocalDownload,
   readProjectUploadManifest,
   recordProjectUploadSuccess,
+  readFailedUploadHistory,
+  recordFailedUpload,
+  clearFailedUpload,
   inspectDocumentMetadata,
 };
