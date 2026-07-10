@@ -3,6 +3,7 @@ const filevineService = require('../services/filevine.service');
 const syncProjectService = require('../services/syncProject.service');
 const scheduleService = require('../services/schedule.service');
 const syncRunService = require('../services/syncRun.service');
+const projectUploadHistoryService = require('../services/projectUploadHistory.service');
 const { log, logError } = require('../utils/logger');
 
 const router = express.Router();
@@ -31,12 +32,30 @@ function initSse(res) {
   res.flushHeaders?.();
 }
 
+router.get('/projects/upload-history', async (req, res) => {
+  try {
+    const rebuild = String(req.query.rebuild || '') === '1';
+    if (rebuild) {
+      projectUploadHistoryService.rebuildProjectUploadHistoryIndex();
+    }
+    const summary = projectUploadHistoryService.getProjectUploadHistorySummary();
+    res.json(summary);
+  } catch (error) {
+    logError('Failed to load project upload history', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 router.get('/projects', async (req, res) => {
   try {
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 1000));
     const accessToken = await filevineService.authenticate();
     const page = await filevineService.listProjectsPage(accessToken, { offset, limit });
+    const uploadedIds = new Set(projectUploadHistoryService.getUploadedProjectIds());
 
     res.json({
       success: true,
@@ -45,6 +64,7 @@ router.get('/projects', async (req, res) => {
       limit: page.limit,
       loadedTo: page.offset + page.projects.length,
       hasMore: page.hasMore,
+      uploadedProjectCount: uploadedIds.size,
       projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate, isArchived }) => ({
         projectId,
         projectName,
@@ -52,6 +72,8 @@ router.get('/projects', async (req, res) => {
         phaseName,
         createdDate,
         isArchived,
+        alreadyUploaded: uploadedIds.has(String(projectId)),
+        isNew: !uploadedIds.has(String(projectId)),
       })),
     });
   } catch (error) {

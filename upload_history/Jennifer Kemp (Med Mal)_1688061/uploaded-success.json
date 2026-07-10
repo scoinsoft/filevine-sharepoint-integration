@@ -1,7 +1,7 @@
 {
   "projectId": "1688061",
   "projectName": "Jennifer Kemp (Med Mal)",
-  "updatedAt": "2026-07-09T02:54:06.934Z",
+  "updatedAt": "2026-07-10T02:25:24.234Z",
   "uploadedDocumentIds": [
     "171343347",
     "174275150",
@@ -118,7 +118,10 @@
     "224588779",
     "176241028",
     "216844270",
-    "224588778"
+    "224588778",
+    "177349838",
+    "177349201",
+    "221613616"
   ],
   "uploadedFilenames": [
     "1 - Health Care Provider Notice for Candor Open Discussion - Dr. Brooks (08509802xA9B4D).docx",
@@ -231,6 +234,9 @@
     "Inpatient stay 02-28-24.pdf",
     "Vascular Institute.pdf",
     "Vascular Institute(1).pdf",
-    "Inpatietn stay 03-06-24.pdf"
+    "Inpatietn stay 03-06-24.pdf",
+    "CH 000001-001916.pdf",
+    "CH.pdf",
+    "CH 000001-001916_Redacted.pdf"
   ]
 }

@@ -5,6 +5,7 @@ const { pipeline } = require('stream/promises');
 const { filevine } = require('../config/env');
 const { log, logError } = require('../utils/logger');
 const { inspectDocumentResponse, logInspectionReport } = require('../utils/documentInspector');
+const projectUploadHistoryService = require('./projectUploadHistory.service');
 
 const DOWNLOAD_LINK_RESPONSE_FILE = path.join(process.cwd(), 'downloads', 'download-link-response.json');
 
@@ -24,6 +25,16 @@ function sanitizeFolderName(name) {
   return String(name || '')
     .replace(/[~"#%&*:<>?/\\{|}]/g, '_')
     .trim() || 'Unnamed Project';
+}
+
+function sanitizeFileName(name) {
+  const base = path.basename(String(name || 'document'));
+  const cleaned = base
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/[~"#%&*{|}]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'document';
 }
 
 function getProjectFolderLabel(projectId, projectName) {
@@ -362,24 +373,41 @@ async function getDownloadLink(accessToken, documentId) {
   }
 }
 
-function getLocalDownloadPath(filename, projectId, projectName) {
-  const safeName = path.basename(filename);
+function getLocalDownloadPath(filename, projectId, projectName, documentId) {
+  const safeName = sanitizeFileName(filename);
+  const projectDir = ensureDownloadsDir(projectId, projectName);
+  // Isolate each document under its own folder to avoid same-name races
+  // when SYNC_CONCURRENCY downloads/uploads in parallel.
+  const targetDir =
+    documentId != null ? path.join(projectDir, String(documentId)) : projectDir;
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
   return {
     safeName,
-    filePath: path.join(ensureDownloadsDir(projectId, projectName), safeName),
+    filePath: path.join(targetDir, safeName),
   };
 }
 
-function getProjectUploadManifestPath(projectId, projectName) {
-  return path.join(
-    ensureUploadHistoryDir(projectId, projectName),
-    'uploaded-success.json'
-  );
+function getProjectUploadManifestPath(projectId, projectName, { create = false } = {}) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for upload history path');
+  }
+  const historyDir = path.join(process.cwd(), 'upload_history', folderLabel);
+  if (create && !fs.existsSync(historyDir)) {
+    fs.mkdirSync(historyDir, { recursive: true });
+  }
+  return path.join(historyDir, 'uploaded-success.json');
 }
 
 function readProjectUploadManifest(projectId, projectName) {
-  const manifestPath = getProjectUploadManifestPath(projectId, projectName);
-  migrateLegacyUploadManifest(projectId, projectName, manifestPath);
+  const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: false });
+  if (fs.existsSync(manifestPath)) {
+    // no-op: already present
+  } else {
+    migrateLegacyUploadManifest(projectId, projectName, manifestPath);
+  }
 
   if (!fs.existsSync(manifestPath)) {
     return {
@@ -412,12 +440,21 @@ function readProjectUploadManifest(projectId, projectName) {
 let manifestWriteChain = Promise.resolve();
 const failedHistoryWriteChains = new Map();
 
-function getFailedHistoryPath(projectId, projectName) {
-  return path.join(ensureFailedHistoryDir(projectId, projectName), 'failed-history.json');
+function getFailedHistoryPath(projectId, projectName, { create = false } = {}) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for failed history path');
+  }
+  const historyDir = path.join(process.cwd(), 'failed_history', folderLabel);
+  if (create && !fs.existsSync(historyDir)) {
+    fs.mkdirSync(historyDir, { recursive: true });
+  }
+  return path.join(historyDir, 'failed-history.json');
 }
 
 function readFailedUploadHistory(projectId, projectName) {
-  const historyPath = getFailedHistoryPath(projectId, projectName);
+  // Do not create folders just by reading — only when recording a real failure.
+  const historyPath = getFailedHistoryPath(projectId, projectName, { create: false });
   if (!fs.existsSync(historyPath)) {
     return {
       historyPath,
@@ -438,6 +475,7 @@ function readFailedUploadHistory(projectId, projectName) {
         filename: entry.filename || null,
         folderName: entry.folderName || null,
         error: entry.error || 'Unknown error',
+        errorCode: entry.errorCode || null,
         firstFailedAt: entry.firstFailedAt || new Date().toISOString(),
         lastFailedAt: entry.lastFailedAt || new Date().toISOString(),
       });
@@ -475,16 +513,54 @@ function queueFailedHistoryWrite(projectId, projectName, writer) {
   return next;
 }
 
+function removeFailedHistoryIfEmpty(projectId, projectName) {
+  const historyPath = getFailedHistoryPath(projectId, projectName, { create: false });
+  const historyDir = path.dirname(historyPath);
+  try {
+    if (fs.existsSync(historyPath)) {
+      fs.unlinkSync(historyPath);
+    }
+    if (fs.existsSync(historyDir)) {
+      const remaining = fs.readdirSync(historyDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(historyDir);
+      }
+    }
+  } catch (error) {
+    logError('Failed to clean empty failed history folder', error);
+  }
+}
+
 function writeFailedHistoryFile(projectId, projectName, failedByDocumentId) {
-  const historyPath = getFailedHistoryPath(projectId, projectName);
+  if (!failedByDocumentId || failedByDocumentId.size === 0) {
+    removeFailedHistoryIfEmpty(projectId, projectName);
+    return null;
+  }
+
+  const historyPath = getFailedHistoryPath(projectId, projectName, { create: true });
   const payload = {
     projectId: String(projectId),
     projectName,
     updatedAt: new Date().toISOString(),
-    failed: [...failedByDocumentId.values()].sort((a, b) => String(a.documentId).localeCompare(String(b.documentId))),
+    failed: [...failedByDocumentId.values()].sort((a, b) =>
+      String(a.documentId).localeCompare(String(b.documentId))
+    ),
   };
   fs.writeFileSync(historyPath, JSON.stringify(payload, null, 2), 'utf8');
   return historyPath;
+}
+
+function extractFailureCode(errorMessage) {
+  const message = String(errorMessage || '');
+  const codeMatch = message.match(/"code"\s*:\s*"([^"]+)"/);
+  if (codeMatch) return codeMatch[1];
+  if (message.includes('ENOENT')) return 'ENOENT';
+  if (message.includes('socket hang up')) return 'socket_hang_up';
+  if (message.includes('ECONNRESET')) return 'ECONNRESET';
+  if (message.includes('resourceModified')) return 'resourceModified';
+  if (message.includes('nameAlreadyExists')) return 'nameAlreadyExists';
+  if (message.includes('Failed to read upload chunk')) return 'chunk_read_mismatch';
+  return null;
 }
 
 function recordFailedUpload(projectId, projectName, failItem, failedByDocumentId) {
@@ -495,13 +571,25 @@ function recordFailedUpload(projectId, projectName, failItem, failedByDocumentId
 
   const existing = failedByDocumentId.get(documentKey);
   const now = new Date().toISOString();
+  const error = failItem?.error || 'Unknown error';
   failedByDocumentId.set(documentKey, {
     documentId: documentKey,
     filename: failItem?.filename || existing?.filename || null,
     folderName: failItem?.folderName || existing?.folderName || null,
-    error: failItem?.error || 'Unknown error',
+    error,
+    errorCode: failItem?.errorCode || extractFailureCode(error) || existing?.errorCode || null,
+    localFilePath: failItem?.localFilePath || existing?.localFilePath || null,
     firstFailedAt: existing?.firstFailedAt || now,
     lastFailedAt: now,
+  });
+
+  log('Recording failed upload', {
+    projectId,
+    projectName,
+    documentId: documentKey,
+    filename: failItem?.filename || null,
+    errorCode: failedByDocumentId.get(documentKey).errorCode,
+    error,
   });
 
   return queueFailedHistoryWrite(projectId, projectName, () =>
@@ -535,7 +623,8 @@ function recordProjectUploadSuccess(
 ) {
   manifestWriteChain = manifestWriteChain
     .then(() => {
-      const manifestPath = getProjectUploadManifestPath(projectId, projectName);
+      // Only create the upload_history folder when we actually have a successful upload.
+      const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: true });
       const documentKey = String(documentId);
       const fileKey = String(filename || '');
 
@@ -553,6 +642,14 @@ function recordProjectUploadSuccess(
       };
 
       fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
+      try {
+        projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
+          uploadedCount: uploadedDocumentIds.size,
+          folderLabel: getProjectFolderLabel(projectId, projectName),
+        });
+      } catch (indexError) {
+        logError('Failed to update project upload history index', indexError);
+      }
       return manifestPath;
     })
     .catch((error) => {
@@ -563,8 +660,13 @@ function recordProjectUploadSuccess(
   return manifestWriteChain;
 }
 
-function getExistingDownload(filename, projectId, projectName) {
-  const { safeName, filePath } = getLocalDownloadPath(filename, projectId, projectName);
+function getExistingDownload(filename, projectId, projectName, documentId) {
+  const { safeName, filePath } = getLocalDownloadPath(
+    filename,
+    projectId,
+    projectName,
+    documentId
+  );
   if (!fs.existsSync(filePath)) {
     return null;
   }
@@ -583,43 +685,142 @@ function getExistingDownload(filename, projectId, projectName) {
   };
 }
 
-async function downloadFromPresignedUrl(downloadLink, filename, projectId, projectName) {
-  const { safeName, filePath } = getLocalDownloadPath(filename, projectId, projectName);
-
-  try {
-    const response = await axios.get(downloadLink, {
-      responseType: 'stream',
-    });
-
-    await pipeline(response.data, fs.createWriteStream(filePath));
-
-    const stats = fs.statSync(filePath);
-    const mimeType = response.headers['content-type'] || 'unknown';
-
-    console.log('✓ Download succeeded');
-    console.log('Filename:', safeName);
-    console.log('Size:', stats.size, 'bytes');
-    console.log('MIME type:', mimeType);
-    console.log('Saved path:', filePath);
-
-    log('Downloaded successfully', {
-      filename: safeName,
-      size: stats.size,
-      mimeType,
-      savedPath: filePath,
-    });
-
-    return {
-      filePath,
-      filename: safeName,
-      size: stats.size,
-      mimeType,
-      alreadyDownloaded: false,
-    };
-  } catch (error) {
-    logError('File download failed', error);
-    throw formatAxiosError(`Failed to download file from presigned URL`, error);
+function isRetryableDownloadError(error) {
+  const code = error?.code || error?.cause?.code;
+  if (['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN', 'ENOENT'].includes(code)) {
+    return true;
   }
+  const message = String(error?.message || '');
+  return (
+    message.includes('socket hang up') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ETIMEDOUT') ||
+    message.includes('ENOENT')
+  );
+}
+
+function delayMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function downloadFromPresignedUrl(downloadLink, filename, projectId, projectName, options = {}) {
+  const documentId = options.documentId;
+  const { safeName, filePath } = getLocalDownloadPath(
+    filename,
+    projectId,
+    projectName,
+    documentId
+  );
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+  const maxAttempts = 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const tempPath = `${filePath}.partial`;
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+
+      const response = await axios.get(downloadLink, {
+        responseType: 'stream',
+        timeout: 10 * 60 * 1000,
+      });
+
+      const totalBytes = Number(response.headers['content-length']) || 0;
+      let bytesDownloaded = 0;
+      let lastReportedAt = 0;
+
+      if (onProgress) {
+        onProgress({
+          filename: safeName,
+          bytesDownloaded: 0,
+          bytesTotal: totalBytes,
+          percent: 0,
+          stage: 'downloading',
+        });
+      }
+
+      response.data.on('data', (chunk) => {
+        bytesDownloaded += chunk.length;
+        if (!onProgress) return;
+
+        const now = Date.now();
+        const isComplete = totalBytes > 0 && bytesDownloaded >= totalBytes;
+        if (!isComplete && now - lastReportedAt < 200) return;
+        lastReportedAt = now;
+
+        const percent =
+          totalBytes > 0 ? Math.min(100, Math.round((bytesDownloaded / totalBytes) * 100)) : 0;
+        onProgress({
+          filename: safeName,
+          bytesDownloaded,
+          bytesTotal: totalBytes,
+          percent,
+          stage: 'downloading',
+        });
+      });
+
+      await pipeline(response.data, fs.createWriteStream(tempPath));
+      fs.renameSync(tempPath, filePath);
+
+      const stats = fs.statSync(filePath);
+      const mimeType = response.headers['content-type'] || 'unknown';
+
+      if (onProgress) {
+        onProgress({
+          filename: safeName,
+          bytesDownloaded: stats.size,
+          bytesTotal: totalBytes || stats.size,
+          percent: 100,
+          stage: 'downloading',
+        });
+      }
+
+      log('Downloaded successfully', {
+        filename: safeName,
+        size: stats.size,
+        mimeType,
+        savedPath: filePath,
+        documentId: documentId || null,
+        attempt,
+      });
+
+      return {
+        filePath,
+        filename: safeName,
+        size: stats.size,
+        mimeType,
+        alreadyDownloaded: false,
+      };
+    } catch (error) {
+      lastError = error;
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {
+        // ignore cleanup errors
+      }
+
+      logError('File download failed', {
+        filename: safeName,
+        documentId: documentId || null,
+        attempt,
+        maxAttempts,
+        code: error.code || null,
+        message: error.message,
+        filePath,
+      });
+
+      if (attempt < maxAttempts && isRetryableDownloadError(error)) {
+        await delayMs(1000 * attempt);
+        continue;
+      }
+      throw formatAxiosError(`Failed to download file from presigned URL`, error);
+    }
+  }
+
+  throw formatAxiosError(`Failed to download file from presigned URL`, lastError);
 }
 
 async function inspectDocumentMetadata(accessToken, documentId) {
@@ -641,17 +842,29 @@ async function inspectDocumentMetadata(accessToken, documentId) {
   }
 }
 
-async function downloadDocument(accessToken, documentId, filename, projectId, projectName) {
+async function downloadDocument(accessToken, documentId, filename, projectId, projectName, options = {}) {
   const resolvedFilename = filename || 'document';
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
 
-  const existing = getExistingDownload(resolvedFilename, projectId, projectName);
+  const existing = getExistingDownload(resolvedFilename, projectId, projectName, documentId);
   if (existing) {
     log('Skipping download; file already exists locally', {
       filename: existing.filename,
       savedPath: existing.filePath,
       size: existing.size,
       projectId,
+      documentId,
     });
+    if (onProgress) {
+      onProgress({
+        filename: existing.filename,
+        bytesDownloaded: existing.size,
+        bytesTotal: existing.size,
+        percent: 100,
+        stage: 'downloading',
+        reusedLocalFile: true,
+      });
+    }
     return {
       ...existing,
       documentId,
@@ -671,7 +884,8 @@ async function downloadDocument(accessToken, documentId, filename, projectId, pr
     downloadLink,
     downloadFilename,
     projectId,
-    projectName
+    projectName,
+    { onProgress, documentId }
   );
 
   return {

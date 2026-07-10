@@ -1,319 +1,47 @@
 {
   "projectId": "67910",
   "projectName": "Castle, Tanner",
-  "updatedAt": "2026-07-09T19:02:14.619Z",
+  "updatedAt": "2026-07-10T06:49:53.369Z",
   "failed": [
     {
-      "documentId": "1008067",
-      "filename": "1-Complaint.pdf",
-      "folderName": "Documents",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\1-Complaint.pdf'",
-      "firstFailedAt": "2026-07-09T18:20:16.629Z",
-      "lastFailedAt": "2026-07-09T18:20:16.629Z"
-    },
-    {
-      "documentId": "1008189",
-      "filename": "psfontj2d.properties",
-      "folderName": "lib",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\psfontj2d.properties'",
-      "firstFailedAt": "2026-07-09T18:54:34.198Z",
-      "lastFailedAt": "2026-07-09T18:54:34.198Z"
-    },
-    {
-      "documentId": "1008388",
-      "filename": "23. JAS 116.pdf",
-      "folderName": "Documents",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\23. JAS 116.pdf'",
-      "firstFailedAt": "2026-07-09T18:28:11.589Z",
-      "lastFailedAt": "2026-07-09T18:28:11.589Z"
-    },
-    {
-      "documentId": "1008414",
-      "filename": "Joints-user-manual.pdf",
-      "folderName": "help",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\Joints-user-manual.pdf'",
-      "firstFailedAt": "2026-07-09T18:50:17.792Z",
-      "lastFailedAt": "2026-07-09T18:50:17.792Z"
-    },
-    {
-      "documentId": "1008463",
-      "filename": "icon.ico",
-      "folderName": "icons",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\icon.ico'",
-      "firstFailedAt": "2026-07-09T18:47:31.238Z",
-      "lastFailedAt": "2026-07-09T18:47:31.238Z"
-    },
-    {
-      "documentId": "1008492",
-      "filename": "DEVCOMPONENTS.DOTNETBAR2.XML",
-      "folderName": "DCSVIEW",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\DEVCOMPONENTS.DOTNETBAR2.XML'",
-      "firstFailedAt": "2026-07-09T18:38:02.090Z",
-      "lastFailedAt": "2026-07-09T18:38:02.090Z"
-    },
-    {
-      "documentId": "1008551",
-      "filename": "15-Photos 000001-000069.pdf",
-      "folderName": "Documents",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\15-Photos 000001-000069.pdf'",
-      "firstFailedAt": "2026-07-09T18:21:36.676Z",
-      "lastFailedAt": "2026-07-09T18:21:36.676Z"
-    },
-    {
-      "documentId": "1008577",
-      "filename": "sunpkcs11.jar",
-      "folderName": "ext",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\sunpkcs11.jar'",
-      "firstFailedAt": "2026-07-09T18:58:43.761Z",
-      "lastFailedAt": "2026-07-09T18:58:43.761Z"
-    },
-    {
-      "documentId": "1008582",
-      "filename": "PYCC.pf",
-      "folderName": "cmm",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\PYCC.pf'",
-      "firstFailedAt": "2026-07-09T18:54:40.633Z",
-      "lastFailedAt": "2026-07-09T18:54:40.633Z"
-    },
-    {
-      "documentId": "1008614",
-      "filename": "DEVCOMPONENTS.DOTNETBAR2.XML",
-      "folderName": "DCSVIEW",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\DEVCOMPONENTS.DOTNETBAR2.XML'",
-      "firstFailedAt": "2026-07-09T18:38:02.338Z",
-      "lastFailedAt": "2026-07-09T18:38:02.338Z"
-    },
-    {
-      "documentId": "1008661",
-      "filename": "winlessmovable.htc",
-      "folderName": "js",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\winlessmovable.htc'",
-      "firstFailedAt": "2026-07-09T18:59:55.847Z",
-      "lastFailedAt": "2026-07-09T18:59:55.847Z"
-    },
-    {
-      "documentId": "1008817",
-      "filename": "rt-vcf.zip",
-      "folderName": "lib",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\rt-vcf.zip'",
-      "firstFailedAt": "2026-07-09T18:57:44.604Z",
-      "lastFailedAt": "2026-07-09T18:57:44.604Z"
-    },
-    {
-      "documentId": "1095151",
-      "filename": "Help.pdf",
-      "folderName": "Discovery",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\Help.pdf'",
-      "firstFailedAt": "2026-07-09T18:47:11.452Z",
-      "lastFailedAt": "2026-07-09T18:47:11.452Z"
-    },
-    {
-      "documentId": "1095178",
-      "filename": "winlessmovable.htc",
-      "folderName": "Discovery",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\winlessmovable.htc'",
-      "firstFailedAt": "2026-07-09T18:59:55.023Z",
-      "lastFailedAt": "2026-07-09T18:59:55.023Z"
-    },
-    {
-      "documentId": "1095227",
-      "filename": "PACSCUBE.PSD",
-      "folderName": "Discovery",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\PACSCUBE.PSD'",
-      "firstFailedAt": "2026-07-09T18:53:02.973Z",
-      "lastFailedAt": "2026-07-09T18:53:02.973Z"
-    },
-    {
-      "documentId": "1095386",
-      "filename": "5. Sheriff.narrative (JAS 6) - Copy.pdf",
-      "folderName": "Discovery",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\5. Sheriff.narrative (JAS 6) - Copy.pdf'",
-      "firstFailedAt": "2026-07-09T18:28:53.688Z",
-      "lastFailedAt": "2026-07-09T18:28:53.688Z"
-    },
-    {
-      "documentId": "1095400",
-      "filename": "9. Site Photos (JAS 11-27).pdf",
-      "folderName": "Discovery",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\9. Site Photos (JAS 11-27).pdf'",
-      "firstFailedAt": "2026-07-09T18:32:51.098Z",
-      "lastFailedAt": "2026-07-09T18:32:51.098Z"
-    },
-    {
-      "documentId": "1095462",
-      "filename": "35. JAS 163-165.pdf",
-      "folderName": "Discovery",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\35. JAS 163-165.pdf'",
-      "firstFailedAt": "2026-07-09T18:28:56.704Z",
-      "lastFailedAt": "2026-07-09T18:28:56.704Z"
-    },
-    {
-      "documentId": "11118522",
-      "filename": "B-Denver Health 000001-000011.pdf",
-      "folderName": "2023-04-11 L Doehling to EXP-Elfenbein (Enclose Denver Health Bill)",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\B-Denver Health 000001-000011.pdf'",
-      "firstFailedAt": "2026-07-09T18:32:15.494Z",
-      "lastFailedAt": "2026-07-09T18:32:15.494Z"
-    },
-    {
-      "documentId": "13364335",
-      "filename": "Subpoena & Waiver to Kearns.pdf",
-      "folderName": "Castle, Tanner",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\Subpoena & Waiver to Kearns.pdf'",
-      "firstFailedAt": "2026-07-09T18:58:07.515Z",
-      "lastFailedAt": "2026-07-09T18:58:07.515Z"
-    },
-    {
-      "documentId": "13647033",
-      "filename": "IMG0.jpg",
-      "folderName": "SE000000",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\IMG0.jpg'",
-      "firstFailedAt": "2026-07-09T18:49:22.407Z",
-      "lastFailedAt": "2026-07-09T18:49:22.407Z"
-    },
-    {
-      "documentId": "13807780",
-      "filename": "EXHIBIT 45-Deposition Exhibit 6 KEARNS NOLAN.pdf",
-      "folderName": "PLAINTIFFS FINAL TRIAL EXHIBITS",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 45-Deposition Exhibit 6 KEARNS NOLAN.pdf'",
-      "firstFailedAt": "2026-07-09T18:44:44.782Z",
-      "lastFailedAt": "2026-07-09T18:44:44.782Z"
-    },
-    {
-      "documentId": "13864536",
-      "filename": "EXHIBIT 45-Deposition Exhibit 6 KEARNS NOLAN.pdf",
-      "folderName": "Pleadings",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 45-Deposition Exhibit 6 KEARNS NOLAN.pdf'",
-      "firstFailedAt": "2026-07-09T18:44:43.281Z",
-      "lastFailedAt": "2026-07-09T18:44:43.281Z"
-    },
-    {
-      "documentId": "3806810",
-      "filename": "Denver Health 000001-000426.pdf",
-      "folderName": "2023-03-08 Doehling to Gerard (Rebuttal Report Request)",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\Denver Health 000001-000426.pdf'",
-      "firstFailedAt": "2026-07-09T18:37:59.863Z",
-      "lastFailedAt": "2026-07-09T18:37:59.863Z"
-    },
-    {
-      "documentId": "5164175",
-      "filename": "EXHIBIT 8-Site Inspection Photos 000001-000050.pdf",
+      "documentId": "5164745",
+      "filename": "EXHIBIT 5-MCSO Body Cam 000001.mp4",
       "folderName": "Draft TRIAL EXHIBITS-NOT APPROVED",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 8-Site Inspection Photos 000001-000050.pdf'",
-      "firstFailedAt": "2026-07-09T18:45:51.661Z",
-      "lastFailedAt": "2026-07-09T18:45:51.661Z"
+      "error": "SharePoint upload failed (status 409): {\"error\":{\"code\":\"resourceModified\",\"message\":\"The resource has changed since the caller last read it; usually an eTag mismatch\"}}",
+      "errorCode": "resourceModified",
+      "localFilePath": "C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\5164745\\EXHIBIT 5-MCSO Body Cam 000001.mp4",
+      "firstFailedAt": "2026-07-10T04:49:11.877Z",
+      "lastFailedAt": "2026-07-10T06:46:17.229Z"
     },
     {
-      "documentId": "5164193",
-      "filename": "EXHIBIT 11-Denver Health 000001-000426.pdf",
-      "folderName": "Draft TRIAL EXHIBITS-NOT APPROVED",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 11-Denver Health 000001-000426.pdf'",
-      "firstFailedAt": "2026-07-09T18:40:05.857Z",
-      "lastFailedAt": "2026-07-09T18:40:05.857Z"
-    },
-    {
-      "documentId": "5164722",
-      "filename": "EXHIBIT 55-Gerganoff Report.pdf",
-      "folderName": "Draft TRIAL EXHIBITS-NOT APPROVED",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 55-Gerganoff Report.pdf'",
-      "firstFailedAt": "2026-07-09T18:44:54.071Z",
-      "lastFailedAt": "2026-07-09T18:44:54.071Z"
-    },
-    {
-      "documentId": "6222534",
-      "filename": "EXHIBIT 50-EXP-Blythes File 1-749.pdf",
+      "documentId": "6222619",
+      "filename": "EXHIBIT 5-MCSO Body Cam 000001.mp4",
       "folderName": "Plaintiffs Trial Exhibits-Approved",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 50-EXP-Blythes File 1-749.pdf'",
-      "firstFailedAt": "2026-07-09T18:44:39.652Z",
-      "lastFailedAt": "2026-07-09T18:44:39.652Z"
+      "error": "SharePoint upload failed (status 409): {\"error\":{\"code\":\"resourceModified\",\"message\":\"The resource has changed since the caller last read it; usually an eTag mismatch\"}}",
+      "errorCode": "resourceModified",
+      "localFilePath": "C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\6222619\\EXHIBIT 5-MCSO Body Cam 000001.mp4",
+      "firstFailedAt": "2026-07-10T04:49:15.844Z",
+      "lastFailedAt": "2026-07-10T06:46:01.796Z"
     },
     {
-      "documentId": "6222627",
-      "filename": "EXHIBIT 7-Photos 000001-000072.pdf",
+      "documentId": "6222623",
+      "filename": "EXHIBIT 6-MCSO Body Cam 000002.mp4",
       "folderName": "Plaintiffs Trial Exhibits-Approved",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\EXHIBIT 7-Photos 000001-000072.pdf'",
-      "firstFailedAt": "2026-07-09T18:45:51.660Z",
-      "lastFailedAt": "2026-07-09T18:45:51.660Z"
+      "error": "SharePoint upload failed (status 409): {\"error\":{\"code\":\"resourceModified\",\"message\":\"The resource has changed since the caller last read it; usually an eTag mismatch\"}}",
+      "errorCode": "resourceModified",
+      "localFilePath": "C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\6222623\\EXHIBIT 6-MCSO Body Cam 000002.mp4",
+      "firstFailedAt": "2026-07-10T04:50:03.313Z",
+      "lastFailedAt": "2026-07-10T06:48:03.924Z"
     },
     {
-      "documentId": "6226167",
-      "filename": "BASIC150DPI-2.PSD",
-      "folderName": "SOURCE FILES",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\BASIC150DPI-2.PSD'",
-      "firstFailedAt": "2026-07-09T18:32:28.333Z",
-      "lastFailedAt": "2026-07-09T18:32:28.333Z"
-    },
-    {
-      "documentId": "6226214",
-      "filename": "jmxremote.access",
-      "folderName": "management",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\jmxremote.access'",
-      "firstFailedAt": "2026-07-09T18:49:58.144Z",
-      "lastFailedAt": "2026-07-09T18:49:58.144Z"
-    },
-    {
-      "documentId": "6226252",
-      "filename": "1.2.410.200049.2.48543780758381.3.1.20210224145031565.344.dcm",
-      "folderName": "1.2.840.114204.2.1.4.20210224152643415184327.11535.127.0.0.1",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\1.2.410.200049.2.48543780758381.3.1.20210224145031565.344.dcm'",
-      "firstFailedAt": "2026-07-09T18:21:25.717Z",
-      "lastFailedAt": "2026-07-09T18:21:25.717Z"
-    },
-    {
-      "documentId": "6226278",
-      "filename": "Joints-user-manual.pdf",
-      "folderName": "help",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\Joints-user-manual.pdf'",
-      "firstFailedAt": "2026-07-09T19:02:14.619Z",
-      "lastFailedAt": "2026-07-09T19:02:14.619Z"
-    },
-    {
-      "documentId": "884737",
-      "filename": "PYCC.pf",
-      "folderName": "cmm",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\PYCC.pf'",
-      "firstFailedAt": "2026-07-09T18:54:47.398Z",
-      "lastFailedAt": "2026-07-09T18:54:47.398Z"
-    },
-    {
-      "documentId": "885140",
-      "filename": "echoes-quick-guide.pdf",
-      "folderName": "help",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\echoes-quick-guide.pdf'",
-      "firstFailedAt": "2026-07-09T18:38:26.421Z",
-      "lastFailedAt": "2026-07-09T18:38:26.421Z"
-    },
-    {
-      "documentId": "885179",
-      "filename": "ENCRYPTEDDISC_README.PDF",
-      "folderName": "8-MMH Imaging CD 000001",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\ENCRYPTEDDISC_README.PDF'",
-      "firstFailedAt": "2026-07-09T18:38:52.636Z",
-      "lastFailedAt": "2026-07-09T18:38:52.636Z"
-    },
-    {
-      "documentId": "885185",
-      "filename": "POWERCOLLECTIONS.XML",
-      "folderName": "DCSVIEW",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\POWERCOLLECTIONS.XML'",
-      "firstFailedAt": "2026-07-09T18:54:33.507Z",
-      "lastFailedAt": "2026-07-09T18:54:33.507Z"
-    },
-    {
-      "documentId": "885222",
-      "filename": "winlessmovable.htc",
-      "folderName": "js",
-      "error": "Failed to download file from presigned URL (status: n/a): ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\winlessmovable.htc'",
-      "firstFailedAt": "2026-07-09T18:59:53.969Z",
-      "lastFailedAt": "2026-07-09T18:59:53.969Z"
-    },
-    {
-      "documentId": "885228",
-      "filename": "4-Denver Health 000001-000426.pdf",
+      "documentId": "884805",
+      "filename": "MCSO Body Cam 000002.mp4",
       "folderName": "Documents",
-      "error": "ENOENT: no such file or directory, stat 'C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\4-Denver Health 000001-000426.pdf'",
-      "firstFailedAt": "2026-07-09T18:28:54.085Z",
-      "lastFailedAt": "2026-07-09T18:28:54.085Z"
+      "error": "SharePoint upload failed (status 409): {\"error\":{\"code\":\"resourceModified\",\"message\":\"The resource has changed since the caller last read it; usually an eTag mismatch\"}}",
+      "errorCode": "resourceModified",
+      "localFilePath": "C:\\Users\\tomi\\Documents\\Projects\\FileVine Integration\\downloads\\Castle, Tanner_67910\\884805\\MCSO Body Cam 000002.mp4",
+      "firstFailedAt": "2026-07-10T04:52:05.395Z",
+      "lastFailedAt": "2026-07-10T06:48:55.605Z"
     }
   ]
 }

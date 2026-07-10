@@ -3,7 +3,9 @@
   const SYNC_ALL_SNAPSHOT_KEY = 'fv_sp_sync_all_snapshot_v1';
   const SYNC_ALL_PROJECT_CONCURRENCY = 3;
   const MAX_SINGLE_RESULT_ROWS = 600;
-  const MAX_SYNC_ALL_HISTORY_ROWS = 1500;
+  const MAX_SYNC_ALL_HISTORY_ROWS = 200;
+  const TRANSFER_TOAST_MIN_INTERVAL_MS = 350;
+  const SYNC_ALL_UI_MIN_INTERVAL_MS = 250;
 
   const state = {
     projects: [],
@@ -11,6 +13,8 @@
     documents: [],
     syncing: false,
     syncingAll: false,
+    uploadedProjectIds: new Set(),
+    uploadHistoryLoaded: false,
     paging: {
       offset: 0,
       pageSize: 100,
@@ -119,7 +123,12 @@
     settingsFilevinePat: $('settings-filevine-pat'),
     settingsFilevineOrgId: $('settings-filevine-org-id'),
     settingsFilevineUserId: $('settings-filevine-user-id'),
-    settingsPowerAutomateUploadUrl: $('settings-power-automate-upload-url'),
+    settingsAzureTenantId: $('settings-azure-tenant-id'),
+    settingsAzureClientId: $('settings-azure-client-id'),
+    settingsAzureClientSecret: $('settings-azure-client-secret'),
+    settingsSharepointSiteId: $('settings-sharepoint-site-id'),
+    settingsSharepointDriveId: $('settings-sharepoint-drive-id'),
+    settingsSharepointRootFolder: $('settings-sharepoint-root-folder'),
     settingsFilevineTokenUrl: $('settings-filevine-token-url'),
     settingsFilevineApi: $('settings-filevine-api'),
     error: $('error'),
@@ -145,6 +154,11 @@
     progressText: $('progress-text'),
     progressPercent: $('progress-percent'),
     progressBar: $('progress-bar'),
+    transferToastPanel: $('transfer-toast-panel'),
+    transferToastHeader: $('transfer-toast-header'),
+    transferToastStack: $('transfer-toast-stack'),
+    transferToastDownloadCount: $('transfer-toast-download-count'),
+    transferToastUploadCount: $('transfer-toast-upload-count'),
     statTotal: $('stat-total'),
     statOk: $('stat-ok'),
     statFail: $('stat-fail'),
@@ -153,6 +167,10 @@
     syncAllBtnLabel: $('sync-all-btn-label'),
     syncAllBtnSpinner: $('sync-all-btn-spinner'),
     syncAllBtnIcon: $('sync-all-btn-icon'),
+    syncNewBtn: $('sync-new-btn'),
+    syncNewBtnLabel: $('sync-new-btn-label'),
+    syncNewBtnSpinner: $('sync-new-btn-spinner'),
+    syncNewBtnIcon: $('sync-new-btn-icon'),
     pauseSyncAllBtn: $('pause-sync-all-btn'),
     resumeSyncAllBtn: $('resume-sync-all-btn'),
     resumeLastSyncAllBtn: $('resume-last-sync-all-btn'),
@@ -174,39 +192,80 @@
 
   function formatArchivedProjectSkipLine(project, summary = {}) {
     const name = summary.projectName || project?.projectName || 'Unknown project';
-    const id = summary.projectId || project?.projectId;
-    const number = summary.projectNumber || project?.projectNumber;
-    const phase = summary.phaseName || project?.phaseName;
-    const details = [];
-    if (number) details.push(`#${number}`);
-    if (id != null) details.push(`ID ${id}`);
-    if (phase) details.push(`phase: ${phase}`);
-    const suffix = details.length ? ` (${details.join(' · ')})` : '';
-    return `Skipped archived project: ${name}${suffix} — no files synced`;
+    return `Archived: ${name}`;
   }
 
   function isLikelyArchivedProject(project) {
     return project?.isArchived === true || project?.phaseName === 'Archived';
   }
 
+  function isProjectAlreadyUploaded(project) {
+    if (!project) return false;
+    if (typeof project.alreadyUploaded === 'boolean') return project.alreadyUploaded;
+    return state.uploadedProjectIds.has(String(project.projectId));
+  }
+
+  function isNewProject(project) {
+    if (!project) return false;
+    if (isLikelyArchivedProject(project)) return false;
+    if (typeof project.isNew === 'boolean') return project.isNew && !isLikelyArchivedProject(project);
+    return !isProjectAlreadyUploaded(project);
+  }
+
+  function markProjectUploadedLocally(projectId) {
+    if (projectId == null) return;
+    const key = String(projectId);
+    state.uploadedProjectIds.add(key);
+    for (const page of state.paging.pageCache.values()) {
+      for (const project of page?.projects || []) {
+        if (String(project.projectId) === key) {
+          project.alreadyUploaded = true;
+          project.isNew = false;
+        }
+      }
+    }
+    for (const project of state.projects) {
+      if (String(project.projectId) === key) {
+        project.alreadyUploaded = true;
+        project.isNew = false;
+      }
+    }
+    if (state.selected && String(state.selected.projectId) === key) {
+      state.selected.alreadyUploaded = true;
+      state.selected.isNew = false;
+    }
+  }
+
+  function getNewProjects() {
+    return getAllCachedProjects().filter((project) => isNewProject(project));
+  }
+
   function getProjectArchiveCounts() {
     const projects = getAllCachedProjects();
     let archived = 0;
+    let newCount = 0;
     for (const project of projects) {
-      if (isLikelyArchivedProject(project)) archived += 1;
+      if (isLikelyArchivedProject(project)) {
+        archived += 1;
+        continue;
+      }
+      if (!isProjectAlreadyUploaded(project)) {
+        newCount += 1;
+      }
     }
     return {
       total: projects.length,
       archived,
       active: projects.length - archived,
+      newCount,
     };
   }
 
   function formatProjectTotalsLabel() {
-    const { total, archived, active } = getProjectArchiveCounts();
+    const { total, archived, active, newCount } = getProjectArchiveCounts();
     if (total === 0) return '';
 
-    const breakdown = ` · ${active} active · ${archived} archived`;
+    const breakdown = ` · ${active} active · ${archived} archived · ${newCount} new`;
     if (state.paging.allLoaded) {
       return ` · ${state.paging.loadedTo} total${breakdown}`;
     }
@@ -223,6 +282,11 @@
       </span>
       <span class="sr-only">Archived project</span>
     `;
+  }
+
+  function renderProjectNewBadge(project) {
+    if (!isNewProject(project)) return '';
+    return `<span class="project-new-badge shrink-0">New</span>`;
   }
 
   function getSessionToken() {
@@ -278,8 +342,28 @@
     return isIncompleteSyncSnapshot(snapshot) ? snapshot : null;
   }
 
-  function saveSyncAllSnapshot() {
+  let lastSnapshotSaveAt = 0;
+  let snapshotSaveTimer = null;
+
+  function saveSyncAllSnapshot(options = {}) {
     if (!state.syncingAll) return;
+
+    const force = Boolean(options.force);
+    const now = Date.now();
+    if (!force && now - lastSnapshotSaveAt < 5000) {
+      if (!snapshotSaveTimer) {
+        snapshotSaveTimer = window.setTimeout(() => {
+          snapshotSaveTimer = null;
+          saveSyncAllSnapshot({ force: true });
+        }, 5000);
+      }
+      return;
+    }
+    lastSnapshotSaveAt = now;
+    if (snapshotSaveTimer) {
+      window.clearTimeout(snapshotSaveTimer);
+      snapshotSaveTimer = null;
+    }
 
     const remaining = state.syncAll.remainingProjects || [];
     const total = Number(state.syncAll.projectsTotal) || 0;
@@ -292,6 +376,11 @@
       state.syncAll.currentProjectName ||
       remaining[0]?.projectName ||
       '';
+    // Keep snapshot light: IDs for resume + a small preview of names for the UI.
+    const remainingPreview = remaining.slice(0, 25).map((project) => ({
+      projectId: project.projectId,
+      projectName: project.projectName,
+    }));
     const payload = {
       savedAt: new Date().toISOString(),
       projectsTotal: state.syncAll.projectsTotal,
@@ -304,13 +393,14 @@
       progressPercent,
       currentProject,
       remainingProjectIds: remaining.map((project) => project.projectId),
-      remainingProjects: remaining.map((project) => ({
-        projectId: project.projectId,
-        projectName: project.projectName,
-      })),
+      remainingProjects: remainingPreview,
     };
-    localStorage.setItem(SYNC_ALL_SNAPSHOT_KEY, JSON.stringify(payload));
-    state.syncAll.resumeSnapshot = payload;
+    try {
+      localStorage.setItem(SYNC_ALL_SNAPSHOT_KEY, JSON.stringify(payload));
+      state.syncAll.resumeSnapshot = payload;
+    } catch (error) {
+      console.warn('Could not save sync snapshot (storage full or blocked)', error);
+    }
   }
 
   function clearSyncAllSnapshot() {
@@ -347,6 +437,24 @@
   function resolveSnapshotRemainingProjects(snapshot) {
     const cached = getAllCachedProjects();
     const cacheById = new Map(cached.map((project) => [String(project.projectId), project]));
+    const previewById = new Map(
+      (snapshot.remainingProjects || []).map((project) => [String(project.projectId), project])
+    );
+
+    const remainingIds = snapshot.remainingProjectIds || [];
+    if (remainingIds.length > 0) {
+      return remainingIds.map((projectId) => {
+        const key = String(projectId);
+        const cachedProject = cacheById.get(key);
+        if (cachedProject) return cachedProject;
+        const preview = previewById.get(key);
+        return {
+          projectId,
+          projectName: preview?.projectName || `Project ${projectId}`,
+        };
+      });
+    }
+
     const fromSnapshot = (snapshot.remainingProjects || []).map((project) => {
       const cachedProject = cacheById.get(String(project.projectId));
       return (
@@ -367,15 +475,7 @@
       return cached.slice(done);
     }
 
-    return (snapshot.remainingProjectIds || []).map((projectId) => {
-      const cachedProject = cacheById.get(String(projectId));
-      return (
-        cachedProject || {
-          projectId,
-          projectName: `Project ${projectId}`,
-        }
-      );
-    });
+    return [];
   }
 
   function formatElapsedMs(ms) {
@@ -879,6 +979,7 @@
       setSessionToken(data.token);
       els.loginPassword.value = '';
       showWorkPage(data.username);
+      await loadUploadHistoryIndex({ rebuild: true });
       loadProjects();
     } catch (error) {
       showLoginError(error.message || 'Could not reach the server.');
@@ -936,7 +1037,12 @@
     els.settingsFilevinePat.value = settings.filevinePat || '';
     els.settingsFilevineOrgId.value = settings.filevineOrgId || '';
     els.settingsFilevineUserId.value = settings.filevineUserId || '';
-    els.settingsPowerAutomateUploadUrl.value = settings.powerAutomateUploadUrl || '';
+    els.settingsAzureTenantId.value = settings.azureTenantId || '';
+    els.settingsAzureClientId.value = settings.azureClientId || '';
+    els.settingsAzureClientSecret.value = settings.azureClientSecret || '';
+    els.settingsSharepointSiteId.value = settings.sharepointSiteId || '';
+    els.settingsSharepointDriveId.value = settings.sharepointDriveId || '';
+    els.settingsSharepointRootFolder.value = settings.sharepointRootFolder || 'Filevine';
     els.settingsFilevineTokenUrl.value = settings.filevineTokenUrl || '';
     els.settingsFilevineApi.value = settings.filevineApi || '';
   }
@@ -948,7 +1054,12 @@
       filevinePat: els.settingsFilevinePat.value.trim(),
       filevineOrgId: els.settingsFilevineOrgId.value.trim(),
       filevineUserId: els.settingsFilevineUserId.value.trim(),
-      powerAutomateUploadUrl: els.settingsPowerAutomateUploadUrl.value.trim(),
+      azureTenantId: els.settingsAzureTenantId.value.trim(),
+      azureClientId: els.settingsAzureClientId.value.trim(),
+      azureClientSecret: els.settingsAzureClientSecret.value.trim(),
+      sharepointSiteId: els.settingsSharepointSiteId.value.trim(),
+      sharepointDriveId: els.settingsSharepointDriveId.value.trim(),
+      sharepointRootFolder: els.settingsSharepointRootFolder.value.trim() || 'Filevine',
     };
   }
 
@@ -1167,6 +1278,24 @@
       els.syncAllBtnIcon
     );
 
+    const newCount = ready ? getNewProjects().length : 0;
+    if (els.syncNewBtn) {
+      els.syncNewBtn.disabled =
+        scheduledBlocked || serverSyncing || !ready || busy || newCount === 0;
+      setButtonLoading(
+        els.syncNewBtnSpinner,
+        els.syncNewBtnLabel,
+        false,
+        newCount > 0 ? `Sync new projects (${newCount})` : 'Sync new projects',
+        'Syncing new projects…',
+        els.syncNewBtnIcon
+      );
+      els.syncNewBtn.title =
+        newCount > 0
+          ? `${newCount} active project(s) not yet in upload history`
+          : 'No new projects available';
+    }
+
     els.pauseSyncAllBtn.disabled = !state.syncingAll || paused;
     els.resumeSyncAllBtn.disabled = !canResumeAll;
     els.resumeLastSyncAllBtn.disabled = !canResumePrevious;
@@ -1213,6 +1342,11 @@
       setSyncAllHint(`Loading projects… (${count} loaded)`, true);
     } else if (count === 0) {
       setSyncAllHint('No projects available to sync.', false);
+    } else if (newCount > 0) {
+      setSyncAllHint(
+        `${newCount} new active project(s) available. Use Sync new projects to upload only those.`,
+        false
+      );
     } else {
       setSyncAllHint(`Ready — ${count} project(s) loaded.`, false);
     }
@@ -1235,10 +1369,28 @@
     state.syncAll.pauseResolver = null;
   }
 
+  function isSharePointConfigError(error) {
+    return Boolean(
+      error?.sharePointConfigError ||
+      String(error?.message || '').includes('SharePoint is misconfigured') ||
+      String(error?.message || '').includes('SharePoint authentication failed')
+    );
+  }
+
+  function getPauseMessage(error) {
+    if (isSharePointConfigError(error)) {
+      return (
+        error?.message ||
+        'SharePoint is misconfigured. Fix AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET in .env, then restart the server.'
+      );
+    }
+    return getBackendPauseMessage(error);
+  }
+
   function pauseSyncAllDueToCrash(error, remainingProjects) {
     if (!state.syncingAll) return;
 
-    const message = getBackendPauseMessage(error);
+    const message = getPauseMessage(error);
     state.syncAll.paused = true;
     state.syncAll.pausedDueToCrash = true;
     state.syncAll.pauseReason = message;
@@ -1440,6 +1592,7 @@
                 selected ? 'bg-blue-100 text-blue-800' : ''
               }">${escapeHtml(projectNumber)}</span>
               <span class="min-w-0 flex-1 truncate">${escapeHtml(project.projectName)}</span>
+              ${renderProjectNewBadge(project)}
               ${renderProjectStatusRibbon(project)}
             </button>
           </li>
@@ -1541,13 +1694,30 @@
 
       const page = {
         offset: normalizedOffset,
-        projects: data.projects || [],
+        projects: (data.projects || []).map((project) => {
+          const alreadyUploaded =
+            Boolean(project.alreadyUploaded) ||
+            state.uploadedProjectIds.has(String(project.projectId));
+          return {
+            ...project,
+            alreadyUploaded,
+            isNew: !alreadyUploaded,
+          };
+        }),
         loadedTo: parseNonNegativeInt(
           data.loadedTo,
           normalizedOffset + (data.projects || []).length
         ),
         hasMore: Boolean(data.hasMore),
       };
+      if (typeof data.uploadedProjectCount === 'number') {
+        // Keep local set in sync when API returns flags.
+        for (const project of page.projects) {
+          if (project.alreadyUploaded) {
+            state.uploadedProjectIds.add(String(project.projectId));
+          }
+        }
+      }
       state.paging.pageCache.set(normalizedOffset, page);
       state.paging.loadedTo = Math.max(state.paging.loadedTo, page.loadedTo);
       updateProjectsLoadIndicator();
@@ -1667,6 +1837,214 @@
     }
   }
 
+  function formatUploadBytes(bytes) {
+    const value = Math.max(0, Number(bytes) || 0);
+    if (value >= 1024 * 1024 * 1024) {
+      return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+    if (value >= 1024 * 1024) {
+      return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (value >= 1024) {
+      return `${(value / 1024).toFixed(1)} KB`;
+    }
+    return `${Math.round(value)} B`;
+  }
+
+  function formatUploadSizeLabel(bytesDone, bytesTotal) {
+    const done = Math.max(0, Number(bytesDone) || 0);
+    const total = Math.max(0, Number(bytesTotal) || 0);
+    if (total > 0) {
+      return `${formatUploadBytes(done)} / ${formatUploadBytes(total)}`;
+    }
+    return formatUploadBytes(done);
+  }
+
+  const activeTransferToasts = new Map();
+  let lastSyncAllUiUpdateAt = 0;
+  let syncAllUiUpdateTimer = null;
+  let syncAllUiForcePending = false;
+
+  const TRANSFER_TOAST_ICONS = {
+    downloading: `
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+    `,
+    uploading: `
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+      </svg>
+    `,
+  };
+
+  function getTransferToastKey(data = {}) {
+    const projectId = data.projectId != null ? String(data.projectId) : 'project';
+    const documentId = data.documentId != null ? String(data.documentId) : data.filename || 'file';
+    return `${projectId}:${documentId}`;
+  }
+
+  function updateTransferToastHeader() {
+    if (!els.transferToastHeader) return;
+    let downloading = 0;
+    let uploading = 0;
+    for (const toast of activeTransferToasts.values()) {
+      if (toast.stage === 'downloading') downloading += 1;
+      else uploading += 1;
+    }
+    const total = downloading + uploading;
+    els.transferToastHeader.classList.toggle('is-visible', total > 0);
+    if (els.transferToastDownloadCount) {
+      els.transferToastDownloadCount.textContent = String(downloading);
+    }
+    if (els.transferToastUploadCount) {
+      els.transferToastUploadCount.textContent = String(uploading);
+    }
+    if (els.transferToastHeader.querySelector) {
+      const title = $('transfer-toast-header-title');
+      if (title) {
+        title.textContent =
+          total === 0
+            ? 'Active transfers'
+            : `${total} transfer${total === 1 ? '' : 's'} in progress`;
+      }
+    }
+  }
+
+  function ensureTransferToast(key) {
+    let toast = activeTransferToasts.get(key);
+    if (toast) return toast;
+
+    const el = document.createElement('div');
+    el.className = 'transfer-toast transfer-toast-download';
+    el.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div data-role="icon" class="transfer-toast-icon">${TRANSFER_TOAST_ICONS.downloading}</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div data-role="stage" class="transfer-toast-stage text-[11px] font-semibold uppercase tracking-[0.08em]">Downloading</div>
+              <div data-role="filename" class="mt-0.5 truncate text-sm font-semibold text-slate-900"></div>
+              <div data-role="project" class="mt-0.5 truncate text-[11px] text-slate-500"></div>
+            </div>
+            <div data-role="percent" class="transfer-toast-percent shrink-0 text-sm font-bold tabular-nums">0%</div>
+          </div>
+          <div data-role="track" class="transfer-toast-track" aria-hidden="true">
+            <div data-role="bar" class="transfer-toast-bar"></div>
+          </div>
+          <div class="mt-1.5 flex items-center justify-between gap-2">
+            <div data-role="size" class="transfer-toast-size text-[11px] font-medium tabular-nums">0 B</div>
+            <div data-role="hint" class="text-[10px] font-medium uppercase tracking-wide text-slate-400">In progress</div>
+          </div>
+        </div>
+      </div>
+    `;
+    els.transferToastStack.appendChild(el);
+    toast = {
+      el,
+      iconEl: el.querySelector('[data-role="icon"]'),
+      stageEl: el.querySelector('[data-role="stage"]'),
+      filenameEl: el.querySelector('[data-role="filename"]'),
+      projectEl: el.querySelector('[data-role="project"]'),
+      percentEl: el.querySelector('[data-role="percent"]'),
+      barEl: el.querySelector('[data-role="bar"]'),
+      sizeEl: el.querySelector('[data-role="size"]'),
+      stage: null,
+      lastUiAt: 0,
+      pending: null,
+      flushTimer: null,
+    };
+    activeTransferToasts.set(key, toast);
+    updateTransferToastHeader();
+    return toast;
+  }
+
+  function applyTransferToastStage(toast, stage) {
+    if (toast.stage === stage) return;
+    toast.stage = stage;
+    const isDownload = stage === 'downloading';
+    toast.el.classList.toggle('transfer-toast-download', isDownload);
+    toast.el.classList.toggle('transfer-toast-upload', !isDownload);
+    toast.iconEl.innerHTML = TRANSFER_TOAST_ICONS[stage] || TRANSFER_TOAST_ICONS.uploading;
+    toast.stageEl.textContent = isDownload ? 'Downloading' : 'Uploading';
+    updateTransferToastHeader();
+  }
+
+  function upsertTransferToast(data = {}) {
+    if (!els.transferToastStack) return;
+    const key = getTransferToastKey(data);
+    const toast = ensureTransferToast(key);
+    const stage = data.stage === 'downloading' ? 'downloading' : 'uploading';
+    const percent = Math.max(0, Math.min(100, Number(data.percent) || 0));
+    const bytesDone =
+      Number(data.bytesDone) ||
+      (stage === 'downloading' ? Number(data.bytesDownloaded) : Number(data.bytesUploaded)) ||
+      0;
+    const bytesTotal = Number(data.bytesTotal) || 0;
+    const force = percent >= 100 || percent === 0 || toast.stage !== stage;
+    const now = Date.now();
+
+    if (!force && toast.lastUiAt && now - toast.lastUiAt < TRANSFER_TOAST_MIN_INTERVAL_MS) {
+      toast.pending = { stage, percent, bytesDone, bytesTotal, data };
+      if (!toast.flushTimer) {
+        toast.flushTimer = window.setTimeout(() => {
+          toast.flushTimer = null;
+          const pending = toast.pending;
+          toast.pending = null;
+          if (!pending) return;
+          upsertTransferToast({
+            ...pending.data,
+            stage: pending.stage,
+            percent: pending.percent,
+            bytesDone: pending.bytesDone,
+            bytesTotal: pending.bytesTotal,
+            bytesDownloaded: pending.stage === 'downloading' ? pending.bytesDone : undefined,
+            bytesUploaded: pending.stage === 'uploading' ? pending.bytesDone : undefined,
+          });
+        }, TRANSFER_TOAST_MIN_INTERVAL_MS);
+      }
+      return;
+    }
+
+    toast.lastUiAt = now;
+    toast.pending = null;
+    applyTransferToastStage(toast, stage);
+    toast.filenameEl.textContent = data.filename || 'file';
+    toast.filenameEl.title = data.filename || 'file';
+    toast.projectEl.textContent = data.projectName || '';
+    toast.projectEl.classList.toggle('hidden', !data.projectName);
+    toast.percentEl.textContent = `${percent}%`;
+    toast.barEl.style.width = `${percent}%`;
+    toast.sizeEl.textContent = formatUploadSizeLabel(bytesDone, bytesTotal);
+  }
+
+  function removeTransferToast(data = {}) {
+    const key = getTransferToastKey(data);
+    const toast = activeTransferToasts.get(key);
+    if (!toast) return;
+    if (toast.flushTimer) {
+      window.clearTimeout(toast.flushTimer);
+      toast.flushTimer = null;
+    }
+    toast.el.classList.add('is-leaving');
+    window.setTimeout(() => {
+      toast.el.remove();
+      activeTransferToasts.delete(key);
+      updateTransferToastHeader();
+    }, 160);
+  }
+
+  function clearAllTransferToasts() {
+    for (const toast of activeTransferToasts.values()) {
+      if (toast.flushTimer) {
+        window.clearTimeout(toast.flushTimer);
+      }
+      toast.el.remove();
+    }
+    activeTransferToasts.clear();
+    updateTransferToastHeader();
+  }
+
   function setProgress(percent, text) {
     const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
     els.progressBar.style.width = `${clamped}%`;
@@ -1715,7 +2093,26 @@
     }
   }
 
-  function updateSyncAllProgressUi() {
+  function updateSyncAllProgressUi(options = {}) {
+    const force = Boolean(options.force);
+    const now = Date.now();
+    if (!force && now - lastSyncAllUiUpdateAt < SYNC_ALL_UI_MIN_INTERVAL_MS) {
+      syncAllUiForcePending = syncAllUiForcePending || Boolean(options.forceNext);
+      if (!syncAllUiUpdateTimer) {
+        syncAllUiUpdateTimer = window.setTimeout(() => {
+          syncAllUiUpdateTimer = null;
+          updateSyncAllProgressUi({ force: true });
+        }, SYNC_ALL_UI_MIN_INTERVAL_MS);
+      }
+      return;
+    }
+    lastSyncAllUiUpdateAt = now;
+    if (syncAllUiUpdateTimer) {
+      window.clearTimeout(syncAllUiUpdateTimer);
+      syncAllUiUpdateTimer = null;
+    }
+    syncAllUiForcePending = false;
+
     const {
       projectsTotal,
       projectsDone,
@@ -1769,7 +2166,12 @@
     while (els.syncAllResultList.children.length > MAX_SYNC_ALL_HISTORY_ROWS) {
       els.syncAllResultList.removeChild(els.syncAllResultList.firstElementChild);
     }
-    els.syncAllResultList.scrollTop = els.syncAllResultList.scrollHeight;
+    // Avoid forcing scroll on every row — only when near bottom.
+    const list = els.syncAllResultList;
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+    if (nearBottom) {
+      list.scrollTop = list.scrollHeight;
+    }
   }
 
   function readSseStream(response, onEvent) {
@@ -1828,6 +2230,7 @@
       onStarted,
       onFileSuccess,
       onFileError,
+      onFileTransferProgress,
       onComplete,
       onError,
       onStatus,
@@ -1866,6 +2269,8 @@
         summary.total = data.total || 0;
         if (onStarted) onStarted(data);
       }
+      if (event === 'file-transfer-progress' && onFileTransferProgress) onFileTransferProgress(data);
+      if (event === 'file-upload-progress' && onFileTransferProgress) onFileTransferProgress(data);
       if (event === 'file-success' && onFileSuccess) onFileSuccess(data);
       if (event === 'file-error' && onFileError) onFileError(data);
       if (event === 'complete') {
@@ -1880,6 +2285,7 @@
           projectNumber: data.projectNumber || null,
           phaseName: data.phaseName || null,
           message: data.message || null,
+          counts: data.counts || null,
           fatalError: null,
         };
         if (onComplete) onComplete(data);
@@ -1922,6 +2328,7 @@
     if (!isResume) {
       els.resultList.innerHTML = '';
       updateUploadProgress(state.documents.length, 0, 0);
+      clearAllTransferToasts();
     }
 
     try {
@@ -1932,22 +2339,52 @@
             setProgress(0, data.message || 'Checking project…');
           }
         },
+        onFileTransferProgress: (data) => {
+          upsertTransferToast({
+            ...data,
+            projectId: data.projectId || state.selected?.projectId,
+            projectName: data.projectName || state.selected?.projectName,
+          });
+        },
         onFileSuccess: (data) => {
-          addResult(data.filename, true);
+          removeTransferToast({
+            ...data,
+            projectId: data.projectId || state.selected?.projectId,
+          });
+          if (
+            data?.skippedAlreadyUploaded ||
+            data?.skippedNoExtension ||
+            data?.skippedNameConflict ||
+            data?.skippedDuplicateFilename
+          ) {
+            addResult(data.filename, true, data.message || 'Skipped');
+          } else {
+            addResult(data.filename, true);
+          }
           updateUploadProgress(data.total, data.succeeded, data.failed);
         },
         onFileError: (data) => {
+          removeTransferToast({
+            ...data,
+            projectId: data.projectId || state.selected?.projectId,
+          });
           addResult(data.filename, false, data.error);
           updateUploadProgress(data.total, data.succeeded, data.failed);
         },
         onComplete: (data) => {
+          clearAllTransferToasts();
           updateUploadProgress(data.total || 0, data.succeeded || 0, data.failed || 0);
           if (data.skippedArchivedProject) {
             setProgress(100, data.message || 'Skipped archived project');
             addArchivedSkipResult(data);
+          } else if (!data.skippedArchivedProject) {
+            markProjectUploadedLocally(data.projectId || state.selected?.projectId);
+            renderProjects();
+            updateSyncAllControls();
           }
         },
         onError: (data) => {
+          clearAllTransferToasts();
           setProgress(0, data.error || 'Sync failed');
           showError(data.error || 'Sync failed');
         },
@@ -1965,6 +2402,7 @@
         showError(error.message);
       }
     } finally {
+      clearAllTransferToasts();
       state.syncing = false;
       updateSyncButton();
       updateSyncAllButton();
@@ -2024,51 +2462,83 @@
             const projectLabel = project.projectName || `Project ${project.projectId}`;
             activeProjects.add(projectLabel);
             updateActiveProjectSummary();
-            if (isLikelyArchivedProject(project)) {
-              addSyncAllHistory(`▶ ${projectLabel} (archived — checking…)`, 'archived');
-            } else {
-              addSyncAllHistory(`▶ ${projectLabel}`, 'info');
-            }
 
             try {
+              // Known archived from project list — skip all Filevine/SharePoint calls.
+              if (isLikelyArchivedProject(project)) {
+                state.syncAll.projectsDone += 1;
+                state.syncAll.projectsSkippedArchived += 1;
+                updateSyncAllProgressUi({ force: true });
+                saveSyncAllSnapshot();
+                addSyncAllHistory(formatArchivedProjectSkipLine(project), 'archived');
+                continue;
+              }
+
               const summary = await syncProjectToSharePoint(project, {
+                onFileTransferProgress: (data) => {
+                  upsertTransferToast({
+                    ...data,
+                    projectId: data.projectId || project.projectId,
+                    projectName: data.projectName || project.projectName,
+                  });
+                },
                 onFileSuccess: (data) => {
-                  if (data?.skippedAlreadyUploaded || data?.skippedNoExtension) {
+                  if (
+                    data?.skippedAlreadyUploaded ||
+                    data?.skippedNoExtension ||
+                    data?.skippedNameConflict ||
+                    data?.skippedDuplicateFilename
+                  ) {
                     state.syncAll.filesSkipped += 1;
-                  } else {
-                    state.syncAll.filesOk += 1;
+                    removeTransferToast({
+                      ...data,
+                      projectId: data.projectId || project.projectId,
+                    });
+                    updateSyncAllProgressUi();
+                    return;
                   }
+                  state.syncAll.filesOk += 1;
+                  removeTransferToast({
+                    ...data,
+                    projectId: data.projectId || project.projectId,
+                  });
                   updateSyncAllProgressUi();
-                  addSyncAllHistory(
-                    `  ✓ ${data.filename} (${project.projectName})`,
-                    'success'
-                  );
                 },
                 onFileError: (data) => {
                   state.syncAll.filesFail += 1;
-                  updateSyncAllProgressUi();
+                  removeTransferToast({
+                    ...data,
+                    projectId: data.projectId || project.projectId,
+                  });
+                  updateSyncAllProgressUi({ force: true });
                   addSyncAllHistory(
-                    `  ✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
+                    `✗ ${data.filename} — ${data.error || 'failed'} (${project.projectName})`,
                     'error'
                   );
                 },
               });
 
               state.syncAll.projectsDone += 1;
-              updateSyncAllProgressUi();
-              saveSyncAllSnapshot();
+              updateSyncAllProgressUi({ force: true });
+              saveSyncAllSnapshot({ force: true });
               if (summary.skippedArchivedProject) {
                 state.syncAll.projectsSkippedArchived += 1;
-                updateSyncAllProgressUi();
+                updateSyncAllProgressUi({ force: true });
                 addSyncAllHistory(formatArchivedProjectSkipLine(project, summary), 'archived');
               } else {
+                markProjectUploadedLocally(project.projectId);
+                const uploaded = Number(summary.counts?.newlyUploaded);
+                const skipped = Number(summary.counts?.skippedAlreadyUploaded);
+                const failed = Number(summary.counts?.failed ?? summary.failed) || 0;
+                const uploadedCount = Number.isFinite(uploaded) ? uploaded : Number(summary.succeeded) || 0;
+                const skippedCount = Number.isFinite(skipped) ? skipped : 0;
                 addSyncAllHistory(
-                  `Done: ${project.projectName} · ${summary.succeeded} uploaded, ${summary.failed} failed`,
-                  summary.failed > 0 ? 'error' : 'success'
+                  `Done: ${project.projectName} · ${uploadedCount} uploaded, ${failed} failed, ${skippedCount} skipped`,
+                  failed > 0 ? 'error' : 'success'
                 );
               }
             } catch (error) {
-              if (isBackendConnectionError(error)) {
+              if (isBackendConnectionError(error) || isSharePointConfigError(error)) {
                 if (!state.syncAll.pausedDueToCrash) {
                   const remaining = [project, ...projects.slice(nextIndex)];
                   pauseSyncAllDueToCrash(error, remaining);
@@ -2116,11 +2586,13 @@
     }
     state.syncingAll = false;
     hidePauseNotice();
+    clearAllTransferToasts();
     clearSyncAllSnapshot();
     updateSyncButton();
     updateSyncAllControls();
     updateProjectsPager();
     updateSyncAllProgressUi();
+    renderProjects();
     addSyncAllHistory(
       `Finished all projects · ${state.syncAll.filesOk} uploaded, ${state.syncAll.filesSkipped} files skipped, ${state.syncAll.projectsSkippedArchived} archived projects skipped, ${state.syncAll.filesFail} failed`,
       state.syncAll.filesFail > 0
@@ -2129,7 +2601,7 @@
     );
   }
 
-  async function startSyncAll() {
+  async function startSyncAll(options = {}) {
     if (state.syncing || (state.syncingAll && !state.syncAll.paused)) return;
     if (isUploadBlockedBySchedule()) {
       showError('Uploads are disabled while the scheduled sync is running (about 2–3 hours).');
@@ -2137,8 +2609,13 @@
     }
     if (!state.paging.allLoaded) return;
 
+    const onlyNew = Boolean(options.onlyNew);
     const allProjects = getAllCachedProjects();
-    if (allProjects.length === 0) return;
+    const sourceProjects = onlyNew ? getNewProjects() : allProjects;
+    if (sourceProjects.length === 0) {
+      showError(onlyNew ? 'No new projects available to sync.' : 'No projects available to sync.');
+      return;
+    }
 
     const isResume = state.syncingAll && state.syncAll.pausedDueToCrash;
     if (isResume) {
@@ -2146,9 +2623,11 @@
       return;
     }
 
+    const projectsToSync = sourceProjects;
+
     state.syncingAll = true;
     state.syncAll = {
-      projectsTotal: allProjects.length,
+      projectsTotal: sourceProjects.length,
       projectsDone: 0,
       filesOk: 0,
       filesSkipped: 0,
@@ -2163,7 +2642,7 @@
       pausedDueToCrash: false,
       pauseReason: '',
       pauseResolver: null,
-      remainingProjects: allProjects,
+      remainingProjects: projectsToSync,
       processing: false,
       resumeSnapshot: null,
     };
@@ -2179,9 +2658,20 @@
     els.syncAllResultList.innerHTML = '';
     updateSyncAllProgressUi();
     startSyncAllTimer();
-    addSyncAllHistory(`Starting sync for ${allProjects.length} project(s)…`, 'info');
+    if (onlyNew) {
+      addSyncAllHistory(
+        `Starting sync for ${projectsToSync.length} new project(s)…`,
+        'info'
+      );
+    } else {
+      addSyncAllHistory(`Starting sync for ${allProjects.length} project(s)…`, 'info');
+    }
 
-    await continueSyncAll(allProjects);
+    await continueSyncAll(projectsToSync);
+  }
+
+  async function startSyncNewProjects() {
+    await startSyncAll({ onlyNew: true });
   }
 
   async function resumeLastSyncAllRun() {
@@ -2239,7 +2729,10 @@
   }
 
   els.syncBtn.addEventListener('click', startSync);
-  els.syncAllBtn.addEventListener('click', startSyncAll);
+  els.syncAllBtn.addEventListener('click', () => startSyncAll());
+  if (els.syncNewBtn) {
+    els.syncNewBtn.addEventListener('click', startSyncNewProjects);
+  }
   els.pauseSyncAllBtn.addEventListener('click', pauseSyncAll);
   els.resumeSyncAllBtn.addEventListener('click', resumeSyncAll);
   els.resumeLastSyncAllBtn.addEventListener('click', resumeLastSyncAllRun);
@@ -2285,6 +2778,38 @@
     loadProjects(nextOffset);
   });
 
+  async function loadUploadHistoryIndex({ rebuild = false } = {}) {
+    try {
+      const url = rebuild
+        ? '/api/projects/upload-history?rebuild=1'
+        : '/api/projects/upload-history';
+      const response = await apiFetch(url);
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load upload history');
+      }
+      state.uploadedProjectIds = new Set((data.uploadedProjectIds || []).map(String));
+      state.uploadHistoryLoaded = true;
+
+      for (const page of state.paging.pageCache.values()) {
+        for (const project of page?.projects || []) {
+          const alreadyUploaded = state.uploadedProjectIds.has(String(project.projectId));
+          project.alreadyUploaded = alreadyUploaded;
+          project.isNew = !alreadyUploaded;
+        }
+      }
+      for (const project of state.projects) {
+        const alreadyUploaded = state.uploadedProjectIds.has(String(project.projectId));
+        project.alreadyUploaded = alreadyUploaded;
+        project.isNew = !alreadyUploaded;
+      }
+      renderProjects();
+      updateSyncAllControls();
+    } catch (error) {
+      console.warn('Could not load project upload history', error);
+    }
+  }
+
   updateSyncAllControls();
   updateRefreshButtons();
 
@@ -2298,6 +2823,7 @@
     if (restored) {
       refreshResumeSnapshot();
       updateSyncAllControls();
+      await loadUploadHistoryIndex({ rebuild: true });
       loadProjects();
     }
   })();

@@ -75,10 +75,21 @@ function categorizeSyncResults(results = {}) {
       folderName: item.folderName || null,
     };
 
-    if (item.skippedAlreadyUploaded || item.skippedNoExtension) {
+    if (
+      item.skippedAlreadyUploaded ||
+      item.skippedNoExtension ||
+      item.skippedNameConflict ||
+      item.skippedDuplicateFilename
+    ) {
       skippedAlreadyUploaded.push({
         ...entry,
-        reason: item.skippedNoExtension ? 'no_extension' : 'already_uploaded',
+        reason: item.skippedDuplicateFilename
+          ? 'duplicate_filename'
+          : item.skippedNoExtension
+            ? 'no_extension'
+            : item.skippedNameConflict
+              ? 'name_conflict'
+              : 'already_uploaded',
       });
       continue;
     }

@@ -10,6 +10,14 @@ const filevineRequired = [
   'FILEVINE_USER_ID',
 ];
 
+const sharepointRequired = [
+  'AZURE_TENANT_ID',
+  'AZURE_CLIENT_ID',
+  'AZURE_CLIENT_SECRET',
+  'SHAREPOINT_SITE_ID',
+  'SHAREPOINT_DRIVE_ID',
+];
+
 function getEnv(name, fallback) {
   const value = settingsService.get(name) ?? fallback;
   if (value === undefined || value === '') {
@@ -24,8 +32,10 @@ function validateFilevineEnv() {
   }
 }
 
-function validatePowerAutomateEnv() {
-  getEnv('POWER_AUTOMATE_UPLOAD_URL');
+function validateSharePointEnv() {
+  for (const key of sharepointRequired) {
+    getEnv(key);
+  }
 }
 
 function validateAuthEnv() {
@@ -56,9 +66,14 @@ module.exports = {
     tokenUrl: () => settingsService.get('FILEVINE_TOKEN_URL') || 'https://identity.filevine.com/connect/token',
     apiBase: () => settingsService.get('FILEVINE_API') || 'https://api.filevineapp.com/fv-app/v2',
   },
-  powerAutomate: {
-    uploadUrl: () => getEnv('POWER_AUTOMATE_UPLOAD_URL'),
+  sharepoint: {
+    tenantId: () => getEnv('AZURE_TENANT_ID'),
+    clientId: () => getEnv('AZURE_CLIENT_ID'),
+    clientSecret: () => getEnv('AZURE_CLIENT_SECRET'),
+    siteId: () => getEnv('SHAREPOINT_SITE_ID'),
+    driveId: () => getEnv('SHAREPOINT_DRIVE_ID'),
+    rootFolder: () => settingsService.get('SHAREPOINT_ROOT_FOLDER') || process.env.SHAREPOINT_ROOT_FOLDER || 'Filevine',
   },
   validateEnv,
-  validatePowerAutomateEnv,
+  validateSharePointEnv,
 };

@@ -25,9 +25,223 @@
       .path-mono {
         word-break: break-all;
       }
+      #transfer-toast-panel {
+        pointer-events: none;
+        position: fixed;
+        right: 0.75rem;
+        top: 0.75rem;
+        z-index: 50;
+        display: flex;
+        width: min(100vw - 1.5rem, 23rem);
+        max-height: 72vh;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      #transfer-toast-header {
+        pointer-events: auto;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-radius: 0.85rem;
+        border: 1px solid #e2e8f0;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(10px);
+        box-shadow:
+          0 8px 24px rgba(15, 23, 42, 0.1),
+          0 1px 4px rgba(15, 23, 42, 0.05);
+        padding: 0.65rem 0.85rem;
+      }
+      #transfer-toast-header.is-visible {
+        display: flex;
+      }
+      #transfer-toast-header-title {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #334155;
+      }
+      #transfer-toast-header-counts {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+      }
+      .transfer-toast-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border-radius: 9999px;
+        padding: 0.15rem 0.5rem;
+      }
+      .transfer-toast-count-download {
+        background: #e0f2fe;
+        color: #0369a1;
+      }
+      .transfer-toast-count-upload {
+        background: #d1fae5;
+        color: #047857;
+      }
+      #transfer-toast-stack {
+        pointer-events: auto;
+        display: flex;
+        min-height: 0;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 0.65rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding-right: 0.15rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.85) transparent;
+      }
+      #transfer-toast-stack::-webkit-scrollbar {
+        width: 6px;
+      }
+      #transfer-toast-stack::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.85);
+        border-radius: 9999px;
+      }
+      #transfer-toast-stack::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .transfer-toast {
+        pointer-events: auto;
+        flex-shrink: 0;
+        overflow: hidden;
+        border-radius: 0.9rem;
+        border: 1px solid transparent;
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(10px);
+        box-shadow:
+          0 10px 30px rgba(15, 23, 42, 0.12),
+          0 2px 8px rgba(15, 23, 42, 0.06);
+        padding: 0.85rem 0.9rem;
+        animation: transfer-toast-in 180ms ease-out;
+        transition:
+          opacity 160ms ease,
+          transform 160ms ease,
+          box-shadow 160ms ease;
+      }
+      .transfer-toast.is-leaving {
+        opacity: 0;
+        transform: translateX(12px);
+      }
+      .transfer-toast-download {
+        border-color: #bae6fd;
+        background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 58%);
+      }
+      .transfer-toast-upload {
+        border-color: #a7f3d0;
+        background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 58%);
+      }
+      .transfer-toast-icon {
+        display: inline-flex;
+        height: 2rem;
+        width: 2rem;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.7rem;
+      }
+      .transfer-toast-download .transfer-toast-icon {
+        background: #e0f2fe;
+        color: #0284c7;
+      }
+      .transfer-toast-upload .transfer-toast-icon {
+        background: #d1fae5;
+        color: #059669;
+      }
+      .transfer-toast-download .transfer-toast-stage {
+        color: #0369a1;
+      }
+      .transfer-toast-upload .transfer-toast-stage {
+        color: #047857;
+      }
+      .transfer-toast-download .transfer-toast-percent {
+        color: #0284c7;
+      }
+      .transfer-toast-upload .transfer-toast-percent {
+        color: #059669;
+      }
+      .transfer-toast-track {
+        display: block;
+        width: 100%;
+        height: 8px;
+        min-height: 8px;
+        margin-top: 0.55rem;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: #e2e8f0;
+      }
+      .transfer-toast-bar {
+        display: block;
+        height: 100%;
+        min-height: 8px;
+        width: 0%;
+        border-radius: 9999px;
+        transition: width 200ms ease;
+      }
+      .transfer-toast-download .transfer-toast-track {
+        background: #bae6fd;
+      }
+      .transfer-toast-upload .transfer-toast-track {
+        background: #a7f3d0;
+      }
+      .transfer-toast-download .transfer-toast-bar {
+        background: linear-gradient(90deg, #38bdf8, #0284c7);
+      }
+      .transfer-toast-upload .transfer-toast-bar {
+        background: linear-gradient(90deg, #34d399, #059669);
+      }
+      .transfer-toast-download .transfer-toast-size {
+        color: #0369a1;
+      }
+      .transfer-toast-upload .transfer-toast-size {
+        color: #047857;
+      }
+      .project-new-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        background: #e0f2fe;
+        color: #0369a1;
+        padding: 0.1rem 0.45rem;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      @keyframes transfer-toast-in {
+        from {
+          opacity: 0;
+          transform: translateX(14px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+        }
+      }
     </style>
   </head>
   <body class="bg-gray-100 text-gray-900">
+    <div id="transfer-toast-panel" aria-live="polite">
+      <div id="transfer-toast-header">
+        <div id="transfer-toast-header-title">Active transfers</div>
+        <div id="transfer-toast-header-counts">
+          <span class="transfer-toast-count transfer-toast-count-download">
+            ↓ <span id="transfer-toast-download-count">0</span>
+          </span>
+          <span class="transfer-toast-count transfer-toast-count-upload">
+            ↑ <span id="transfer-toast-upload-count">0</span>
+          </span>
+        </div>
+      </div>
+      <div id="transfer-toast-stack"></div>
+    </div>
+
     <!-- Login -->
     <div id="login-view" class="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center p-4 sm:p-6">
       <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
@@ -142,9 +356,32 @@
                 <input id="settings-filevine-user-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
               </div>
             </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="settings-azure-tenant-id" class="mb-1 block text-sm font-medium text-gray-700">Azure Tenant ID</label>
+                <input id="settings-azure-tenant-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label for="settings-azure-client-id" class="mb-1 block text-sm font-medium text-gray-700">Azure Client ID</label>
+                <input id="settings-azure-client-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              </div>
+            </div>
             <div>
-              <label for="settings-power-automate-upload-url" class="mb-1 block text-sm font-medium text-gray-700">Power Automate Upload URL</label>
-              <input id="settings-power-automate-upload-url" type="url" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              <label for="settings-azure-client-secret" class="mb-1 block text-sm font-medium text-gray-700">Azure Client Secret</label>
+              <input id="settings-azure-client-secret" type="password" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-sharepoint-site-id" class="mb-1 block text-sm font-medium text-gray-700">SharePoint Site ID</label>
+              <input id="settings-sharepoint-site-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-sharepoint-drive-id" class="mb-1 block text-sm font-medium text-gray-700">SharePoint Drive ID</label>
+              <input id="settings-sharepoint-drive-id" type="text" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label for="settings-sharepoint-root-folder" class="mb-1 block text-sm font-medium text-gray-700">SharePoint Root Folder</label>
+              <input id="settings-sharepoint-root-folder" type="text" placeholder="Filevine" class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              <p class="mt-1 text-xs text-gray-500">Upload path: /{root folder}/{project name}/{filename}</p>
             </div>
             <div>
               <label for="settings-filevine-token-url" class="mb-1 block text-sm font-medium text-gray-700">Filevine Token URL</label>
@@ -504,6 +741,21 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             <span id="sync-all-btn-label" class="text-center">Sync all to SharePoint</span>
+          </button>
+          <button
+            id="sync-new-btn"
+            type="button"
+            disabled
+            class="flex min-h-[2.75rem] flex-1 items-center justify-center gap-2 rounded bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            <svg id="sync-new-btn-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <svg id="sync-new-btn-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span id="sync-new-btn-label" class="text-center">Sync new projects</span>
           </button>
           <button
             id="pause-sync-all-btn"

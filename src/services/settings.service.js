@@ -10,7 +10,12 @@ const EDITABLE_KEYS = [
   'FILEVINE_PAT',
   'FILEVINE_ORG_ID',
   'FILEVINE_USER_ID',
-  'POWER_AUTOMATE_UPLOAD_URL',
+  'AZURE_TENANT_ID',
+  'AZURE_CLIENT_ID',
+  'AZURE_CLIENT_SECRET',
+  'SHAREPOINT_SITE_ID',
+  'SHAREPOINT_DRIVE_ID',
+  'SHAREPOINT_ROOT_FOLDER',
 ];
 
 const READONLY_KEYS = ['FILEVINE_TOKEN_URL', 'FILEVINE_API'];
@@ -18,6 +23,7 @@ const READONLY_KEYS = ['FILEVINE_TOKEN_URL', 'FILEVINE_API'];
 const DEFAULTS = {
   FILEVINE_TOKEN_URL: 'https://identity.filevine.com/connect/token',
   FILEVINE_API: 'https://api.filevineapp.com/fv-app/v2',
+  SHAREPOINT_ROOT_FOLDER: 'Filevine',
 };
 
 const API_FIELD_MAP = {
@@ -26,7 +32,12 @@ const API_FIELD_MAP = {
   filevinePat: 'FILEVINE_PAT',
   filevineOrgId: 'FILEVINE_ORG_ID',
   filevineUserId: 'FILEVINE_USER_ID',
-  powerAutomateUploadUrl: 'POWER_AUTOMATE_UPLOAD_URL',
+  azureTenantId: 'AZURE_TENANT_ID',
+  azureClientId: 'AZURE_CLIENT_ID',
+  azureClientSecret: 'AZURE_CLIENT_SECRET',
+  sharepointSiteId: 'SHAREPOINT_SITE_ID',
+  sharepointDriveId: 'SHAREPOINT_DRIVE_ID',
+  sharepointRootFolder: 'SHAREPOINT_ROOT_FOLDER',
   filevineTokenUrl: 'FILEVINE_TOKEN_URL',
   filevineApi: 'FILEVINE_API',
 };
@@ -80,7 +91,12 @@ function getPublicSettings() {
     filevinePat: get('FILEVINE_PAT') || '',
     filevineOrgId: get('FILEVINE_ORG_ID') || '',
     filevineUserId: get('FILEVINE_USER_ID') || '',
-    powerAutomateUploadUrl: get('POWER_AUTOMATE_UPLOAD_URL') || '',
+    azureTenantId: get('AZURE_TENANT_ID') || '',
+    azureClientId: get('AZURE_CLIENT_ID') || '',
+    azureClientSecret: get('AZURE_CLIENT_SECRET') || '',
+    sharepointSiteId: get('SHAREPOINT_SITE_ID') || '',
+    sharepointDriveId: get('SHAREPOINT_DRIVE_ID') || '',
+    sharepointRootFolder: get('SHAREPOINT_ROOT_FOLDER') || DEFAULTS.SHAREPOINT_ROOT_FOLDER,
     filevineTokenUrl: get('FILEVINE_TOKEN_URL') || DEFAULTS.FILEVINE_TOKEN_URL,
     filevineApi: get('FILEVINE_API') || DEFAULTS.FILEVINE_API,
   };
