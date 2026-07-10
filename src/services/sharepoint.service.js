@@ -36,6 +36,19 @@ function buildSharePointPath(projectName, filename) {
   return `${getRootFolder()}/${safeProjectName}/${safeFilename}`;
 }
 
+function buildProjectFolderPath(projectName) {
+  const safeProjectName = sanitizeFolderName(projectName);
+  return `${getRootFolder()}/${safeProjectName}`;
+}
+
+function isItemNotFoundError(error) {
+  if (!error) return false;
+  const status = error?.response?.status;
+  const code = getGraphErrorCode(error);
+  if (status === 404) return true;
+  return code === 'itemNotFound';
+}
+
 /** Serialize uploads targeting the same SharePoint path. */
 const uploadPathLocks = new Map();
 
@@ -160,6 +173,13 @@ function buildItemContentUrl(itemPath) {
   const driveId = encodeURIComponent(sharepoint.driveId());
   const encodedPath = encodeGraphPath(itemPath);
   return `${GRAPH_BASE}/sites/${siteId}/drives/${driveId}/root:/${encodedPath}:/content`;
+}
+
+function buildItemByPathUrl(itemPath) {
+  const siteId = encodeURIComponent(sharepoint.siteId());
+  const driveId = encodeURIComponent(sharepoint.driveId());
+  const encodedPath = encodeGraphPath(itemPath);
+  return `${GRAPH_BASE}/sites/${siteId}/drives/${driveId}/root:/${encodedPath}`;
 }
 
 function buildItemUploadSessionUrl(itemPath) {
@@ -629,10 +649,39 @@ async function uploadFile(filePath, projectId, projectName, contentType, options
   });
 }
 
+async function deleteFolderByPath(relativeFolderPath) {
+  const folderPath = String(relativeFolderPath || '').replace(/^\/+/, '');
+  if (!folderPath) {
+    throw new Error('SharePoint delete failed: missing folder path');
+  }
+
+  return withAccessToken(async (accessToken) => {
+    const url = `${buildItemByPathUrl(folderPath)}:`;
+    try {
+      await axios.delete(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        timeout: getUploadTimeoutMs(),
+        validateStatus: (status) => status === 204 || status === 200,
+      });
+      return { deleted: true, existed: true, folderPath };
+    } catch (error) {
+      if (isItemNotFoundError(error)) {
+        return { deleted: false, existed: false, notFound: true, folderPath };
+      }
+      throw formatGraphError(error, 'delete');
+    }
+  });
+}
+
 module.exports = {
   uploadToSharePoint,
   uploadFile,
   buildSharePointPath,
+  buildProjectFolderPath,
+  sanitizeFolderName,
+  deleteFolderByPath,
   formatMegabytes,
   clearCachedToken,
   verifySharePointAuth,

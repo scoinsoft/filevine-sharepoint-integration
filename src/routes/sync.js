@@ -4,6 +4,7 @@ const syncProjectService = require('../services/syncProject.service');
 const scheduleService = require('../services/schedule.service');
 const syncRunService = require('../services/syncRun.service');
 const projectUploadHistoryService = require('../services/projectUploadHistory.service');
+const removeArchivedSharePointFoldersService = require('../services/removeArchivedSharePointFolders.service');
 const { log, logError } = require('../utils/logger');
 
 const router = express.Router();
@@ -121,6 +122,63 @@ router.get('/sync/status', (req, res) => {
     activeRuns: syncRunService.getActiveRuns(),
     hasActiveRuns: syncRunService.hasActiveRuns(),
   });
+});
+
+router.get('/sharepoint/remove-archived-folders/preview', async (req, res) => {
+  try {
+    const preview = await removeArchivedSharePointFoldersService.countArchivedProjects();
+    res.json({
+      success: true,
+      archivedCount: preview.archivedCount,
+      projects: preview.projects,
+    });
+  } catch (error) {
+    logError('Failed to preview archived SharePoint folder cleanup', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+router.post('/sharepoint/remove-archived-folders', async (req, res) => {
+  if (syncRunService.hasActiveRuns()) {
+    return res.status(423).json({
+      success: false,
+      error: 'Cannot remove folders while a project sync is running. Wait for sync to finish and try again.',
+    });
+  }
+
+  initSse(res);
+  const sendSse = createSseSender(res);
+
+  try {
+    log('Archived SharePoint folder cleanup started');
+    await removeArchivedSharePointFoldersService.removeArchivedSharePointFolders({
+      onEvent: (event, data) => sendSse(event, data),
+    });
+    log('Archived SharePoint folder cleanup finished');
+    res.end();
+  } catch (error) {
+    logError('Archived SharePoint folder cleanup failed', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+    sendSse('error', { error: error.message });
+    sendSse('complete', {
+      success: false,
+      total: 0,
+      deleted: 0,
+      skipped: 0,
+      failed: 0,
+      message: error.message,
+    });
+    res.end();
+  }
 });
 
 router.post('/projects/:projectId/sync', async (req, res) => {

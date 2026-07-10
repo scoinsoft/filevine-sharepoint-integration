@@ -61,6 +61,10 @@
       pollTimer: null,
     },
     backgroundSyncs: [],
+    removeArchived: {
+      running: false,
+      archivedCount: 0,
+    },
   };
 
 
@@ -188,6 +192,19 @@
     syncAllProjectsSkippedArchived: $('sync-all-projects-skipped-archived'),
     syncAllFilesFail: $('sync-all-files-fail'),
     syncAllResultList: $('sync-all-result-list'),
+    removeArchivedSpBtn: $('remove-archived-sp-btn'),
+    removeArchivedModal: $('remove-archived-modal'),
+    removeArchivedError: $('remove-archived-error'),
+    removeArchivedPreviewText: $('remove-archived-preview-text'),
+    removeArchivedProgressBox: $('remove-archived-progress-box'),
+    removeArchivedProgressText: $('remove-archived-progress-text'),
+    removeArchivedProgressPercent: $('remove-archived-progress-percent'),
+    removeArchivedProgressBar: $('remove-archived-progress-bar'),
+    removeArchivedResultList: $('remove-archived-result-list'),
+    removeArchivedCancelBtn: $('remove-archived-cancel-btn'),
+    removeArchivedStartBtn: $('remove-archived-start-btn'),
+    removeArchivedStartSpinner: $('remove-archived-start-spinner'),
+    removeArchivedStartLabel: $('remove-archived-start-label'),
   };
 
   function formatArchivedProjectSkipLine(project, summary = {}) {
@@ -1078,6 +1095,219 @@
     showSettingsSuccess('');
   }
 
+  function showRemoveArchivedError(message) {
+    if (!message) {
+      els.removeArchivedError.classList.add('hidden');
+      els.removeArchivedError.textContent = '';
+      return;
+    }
+    els.removeArchivedError.textContent = message;
+    els.removeArchivedError.classList.remove('hidden');
+  }
+
+  function resetRemoveArchivedProgressUi() {
+    els.removeArchivedProgressBox.classList.add('hidden');
+    els.removeArchivedProgressText.textContent = 'Starting…';
+    els.removeArchivedProgressPercent.textContent = '0%';
+    els.removeArchivedProgressBar.style.width = '0%';
+    els.removeArchivedResultList.innerHTML = '';
+  }
+
+  function addRemoveArchivedHistoryLine(message, tone = 'info') {
+    const li = document.createElement('li');
+    const toneClass =
+      tone === 'deleted'
+        ? 'text-green-700'
+        : tone === 'failed'
+          ? 'text-red-700'
+          : tone === 'skipped'
+            ? 'text-gray-600'
+            : 'text-gray-700';
+    li.className = toneClass;
+    li.textContent = message;
+    els.removeArchivedResultList.appendChild(li);
+    els.removeArchivedResultList.scrollTop = els.removeArchivedResultList.scrollHeight;
+  }
+
+  function updateRemoveArchivedControls() {
+    if (!els.removeArchivedSpBtn) return;
+    const scheduledBlocked = isUploadBlockedBySchedule();
+    const serverSyncing = state.backgroundSyncs.length > 0;
+    const busy = state.syncing || (state.syncingAll && !state.syncAll.paused) || state.removeArchived.running;
+    els.removeArchivedSpBtn.disabled = scheduledBlocked || serverSyncing || busy;
+
+    if (els.removeArchivedStartBtn) {
+      const canStart =
+        !state.removeArchived.running &&
+        state.removeArchived.archivedCount > 0 &&
+        !scheduledBlocked &&
+        !serverSyncing &&
+        !state.syncing &&
+        !(state.syncingAll && !state.syncAll.paused);
+      els.removeArchivedStartBtn.disabled = !canStart;
+    }
+
+    if (els.removeArchivedCancelBtn) {
+      els.removeArchivedCancelBtn.disabled = state.removeArchived.running;
+      els.removeArchivedCancelBtn.textContent = state.removeArchived.running ? 'Running…' : 'Cancel';
+    }
+
+    if (els.removeArchivedStartSpinner && els.removeArchivedStartLabel) {
+      if (state.removeArchived.running) {
+        els.removeArchivedStartSpinner.classList.remove('hidden');
+        els.removeArchivedStartLabel.textContent = 'Removing…';
+        els.removeArchivedStartBtn.disabled = true;
+      } else {
+        els.removeArchivedStartSpinner.classList.add('hidden');
+        els.removeArchivedStartLabel.textContent = 'Remove archived folders';
+      }
+    }
+  }
+
+  async function loadRemoveArchivedPreview() {
+    if (!els.removeArchivedPreviewText) return;
+    els.removeArchivedPreviewText.textContent = 'Loading archived projects from Filevine…';
+    state.removeArchived.archivedCount = 0;
+    updateRemoveArchivedControls();
+
+    try {
+      const response = await apiFetch('/api/sharepoint/remove-archived-folders/preview');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load preview');
+      }
+
+      state.removeArchived.archivedCount = Number(data.archivedCount) || 0;
+      if (state.removeArchived.archivedCount === 0) {
+        els.removeArchivedPreviewText.textContent =
+          'No archived projects found in Filevine. Nothing will be removed.';
+      } else {
+        els.removeArchivedPreviewText.textContent = `${state.removeArchived.archivedCount} archived project(s) will be checked. Matching folders under Filevine/[Project Name] in SharePoint will be deleted permanently.`;
+      }
+    } catch (error) {
+      els.removeArchivedPreviewText.textContent = 'Could not load archived project count.';
+      showRemoveArchivedError(error.message || 'Failed to load preview.');
+    } finally {
+      updateRemoveArchivedControls();
+    }
+  }
+
+  function openRemoveArchivedModal() {
+    if (!els.removeArchivedModal) return;
+    els.removeArchivedModal.classList.remove('hidden');
+    els.removeArchivedModal.classList.add('flex');
+    showRemoveArchivedError('');
+    resetRemoveArchivedProgressUi();
+    loadRemoveArchivedPreview();
+  }
+
+  function closeRemoveArchivedModal() {
+    if (!els.removeArchivedModal) return;
+    if (state.removeArchived.running) return;
+    els.removeArchivedModal.classList.add('hidden');
+    els.removeArchivedModal.classList.remove('flex');
+    showRemoveArchivedError('');
+    resetRemoveArchivedProgressUi();
+    if (els.removeArchivedCancelBtn) {
+      els.removeArchivedCancelBtn.textContent = 'Cancel';
+    }
+  }
+
+  async function startRemoveArchivedCleanup() {
+    if (state.removeArchived.running) return;
+
+    state.removeArchived.running = true;
+    showRemoveArchivedError('');
+    resetRemoveArchivedProgressUi();
+    els.removeArchivedProgressBox.classList.remove('hidden');
+    updateRemoveArchivedControls();
+    updateSyncAllControls();
+
+    let summary = {
+      success: false,
+      total: 0,
+      deleted: 0,
+      skipped: 0,
+      failed: 0,
+      message: '',
+    };
+
+    try {
+      const response = await apiFetch('/api/sharepoint/remove-archived-folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${response.status})`);
+      }
+
+      let streamError = null;
+
+      await readSseStream(response, (event, data) => {
+        if (event === 'status' && data?.message) {
+          els.removeArchivedProgressText.textContent = data.message;
+        }
+        if (event === 'started') {
+          els.removeArchivedProgressText.textContent = data.message || 'Starting…';
+        }
+        if (event === 'progress') {
+          const percent = Number(data.percent) || 0;
+          els.removeArchivedProgressText.textContent =
+            data.message || `Processing ${data.current || 0} of ${data.total || 0}…`;
+          els.removeArchivedProgressPercent.textContent = `${percent}%`;
+          els.removeArchivedProgressBar.style.width = `${percent}%`;
+        }
+        if (event === 'folder-deleted') {
+          addRemoveArchivedHistoryLine(data.message || `Removed: ${data.projectName}`, 'deleted');
+        }
+        if (event === 'folder-skipped') {
+          addRemoveArchivedHistoryLine(data.message || `Not found: ${data.projectName}`, 'skipped');
+        }
+        if (event === 'folder-error') {
+          addRemoveArchivedHistoryLine(data.message || data.error || `Failed: ${data.projectName}`, 'failed');
+        }
+        if (event === 'complete') {
+          summary = {
+            success: Boolean(data.success),
+            total: Number(data.total) || 0,
+            deleted: Number(data.deleted) || 0,
+            skipped: Number(data.skipped) || 0,
+            failed: Number(data.failed) || 0,
+            message: data.message || '',
+          };
+          els.removeArchivedProgressPercent.textContent = '100%';
+          els.removeArchivedProgressBar.style.width = '100%';
+          els.removeArchivedProgressText.textContent = summary.message;
+        }
+        if (event === 'error') {
+          streamError = new Error(data.error || 'Cleanup failed');
+        }
+      });
+
+      if (streamError) {
+        throw streamError;
+      }
+
+      if (!summary.success && summary.failed > 0) {
+        showRemoveArchivedError(summary.message || 'Some folders could not be removed.');
+      }
+    } catch (error) {
+      showRemoveArchivedError(error.message || 'Cleanup failed.');
+      els.removeArchivedProgressText.textContent = 'Cleanup stopped.';
+    } finally {
+      state.removeArchived.running = false;
+      if (els.removeArchivedCancelBtn) {
+        els.removeArchivedCancelBtn.disabled = false;
+        els.removeArchivedCancelBtn.textContent = 'Close';
+      }
+      updateRemoveArchivedControls();
+      updateSyncAllControls();
+    }
+  }
+
   async function loadSettings() {
     showSettingsError('');
     showSettingsSuccess('');
@@ -1350,6 +1580,8 @@
     } else {
       setSyncAllHint(`Ready — ${count} project(s) loaded.`, false);
     }
+
+    updateRemoveArchivedControls();
   }
 
   function updateSyncAllButton() {
@@ -2764,6 +2996,22 @@
       closeSettingsModal();
     }
   });
+  if (els.removeArchivedSpBtn) {
+    els.removeArchivedSpBtn.addEventListener('click', openRemoveArchivedModal);
+  }
+  if (els.removeArchivedCancelBtn) {
+    els.removeArchivedCancelBtn.addEventListener('click', closeRemoveArchivedModal);
+  }
+  if (els.removeArchivedStartBtn) {
+    els.removeArchivedStartBtn.addEventListener('click', startRemoveArchivedCleanup);
+  }
+  if (els.removeArchivedModal) {
+    els.removeArchivedModal.addEventListener('click', (event) => {
+      if (event.target === els.removeArchivedModal && !state.removeArchived.running) {
+        closeRemoveArchivedModal();
+      }
+    });
+  }
   els.logoutBtn.addEventListener('click', handleLogout);
   els.refreshProjectsBtn.addEventListener('click', refreshProjects);
   els.refreshFilesBtn.addEventListener('click', refreshFiles);
