@@ -1,7 +1,7 @@
 {
   "projectId": "2301793",
   "projectName": "Susan Smith",
-  "updatedAt": "2026-07-10T00:51:23.970Z",
+  "updatedAt": "2026-08-10T14:23:33.539Z",
   "uploadedDocumentIds": [
     "183256697",
     "182167294",
@@ -165,7 +165,9 @@
     "191320000",
     "191319992",
     "191319998",
-    "191319991"
+    "191319991",
+    "228477468",
+    "228901552"
   ],
   "uploadedFilenames": [
     "2025-01-16 E Smith Susan- City of GJ.pdf",
@@ -319,6 +321,8 @@
     "04-312-25_NR#25-1346_(Extraction_1.1)_S_7TH_ST_UTE_AVE.mp4",
     "S_7TH_ST_UTE_AVE.mp4",
     "04-312-25_NR#25-1346_(Extraction_1.1)_S_7TH_ST_UTE_AVE-2.mp4",
-    "04-312-25_NR#25-1346_(Extraction_1.1)_S_7TH_ST_UTE_AVE-3.mp4"
+    "04-312-25_NR#25-1346_(Extraction_1.1)_S_7TH_ST_UTE_AVE-3.mp4",
+    "2026-07-22 HMS-Veritas.pdf",
+    "2026-07-27 CMS-Veritas.pdf"
   ]
 }

@@ -183,7 +183,7 @@ function normalizeDocument(document) {
   };
 }
 
-async function fetchAllPages(client, endpoint, label) {
+async function fetchAllPages(client, endpoint, label, extraParams = {}) {
   const collected = [];
   let offset = 0;
   const limit = 50;
@@ -191,7 +191,7 @@ async function fetchAllPages(client, endpoint, label) {
 
   while (hasMore) {
     const response = await client.get(endpoint, {
-      params: { offset, limit },
+      params: { offset, limit, ...extraParams },
     });
 
     const items = response.data?.items || [];
@@ -304,10 +304,13 @@ async function listDocuments(accessToken, projectId) {
   const client = getApiClient(accessToken);
 
   try {
+    // Filevine Get Document List: GET /Documents?projectId=...
+    // (nested /projects/{id}/documents is not a valid fv-app/v2 route)
     const items = await fetchAllPages(
       client,
-      `/projects/${projectId}/documents`,
-      `Documents for project ${projectId}`
+      '/Documents',
+      `Documents for project ${projectId}`,
+      { projectId }
     );
     log(`Documents count: ${items.length}`);
 

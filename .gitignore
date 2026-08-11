@@ -4,3 +4,4 @@ downloads/
 data/settings.json
 data/schedule.json
 failed_history/
+sync_history/

@@ -1,7 +1,7 @@
 {
   "projectId": "2469192",
   "projectName": "Lora Weaver",
-  "updatedAt": "2026-07-08T23:23:39.743Z",
+  "updatedAt": "2026-08-10T14:20:20.638Z",
   "uploadedDocumentIds": [
     "200696804",
     "199858625",
@@ -78,7 +78,9 @@
     "198785140",
     "221002480",
     "216473035",
-    "216473873"
+    "216473873",
+    "227666993",
+    "228317424"
   ],
   "uploadedFilenames": [
     "2025-08-21 Optum-Veritas.pdf",
@@ -149,6 +151,8 @@
     "VVH 000001-000076.pdf",
     "Grand River Health (GRH) bills and records.pdf",
     "Welcome letter to client 2025-07-30 0906.docx",
-    "VVH.pdf"
+    "VVH.pdf",
+    "Update.eml",
+    "Provider List.eml"
   ]
 }
