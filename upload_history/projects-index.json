@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-11T07:26:25.045Z",
+  "updatedAt": "2026-08-11T18:31:40.133Z",
   "projects": {
     "35244": {
       "projectId": "35244",
@@ -9448,6 +9448,38 @@
       "folderLabel": "Kelon Moses_2702500",
       "firstSyncedAt": "2026-08-11T06:00:19.746Z",
       "lastSyncedAt": "2026-08-11T06:00:19.746Z",
+      "uploadedCount": 0
+    },
+    "2702694": {
+      "projectId": "2702694",
+      "projectName": "Cara Hadley",
+      "folderLabel": "Cara Hadley_2702694",
+      "firstSyncedAt": "2026-08-11T18:31:00.698Z",
+      "lastSyncedAt": "2026-08-11T18:31:40.133Z",
+      "uploadedCount": 9
+    },
+    "2702771": {
+      "projectId": "2702771",
+      "projectName": "Melanie Avre OBO Steve Avre",
+      "folderLabel": "Melanie Avre OBO Steve Avre_2702771",
+      "firstSyncedAt": "2026-08-11T18:30:58.550Z",
+      "lastSyncedAt": "2026-08-11T18:30:59.802Z",
+      "uploadedCount": 3
+    },
+    "2702812": {
+      "projectId": "2702812",
+      "projectName": "Miguel Gosalbez",
+      "folderLabel": "Miguel Gosalbez_2702812",
+      "firstSyncedAt": "2026-08-11T18:30:57.910Z",
+      "lastSyncedAt": "2026-08-11T18:30:58.517Z",
+      "uploadedCount": 1
+    },
+    "2703002": {
+      "projectId": "2703002",
+      "projectName": "Tracey Grimes",
+      "folderLabel": "Tracey Grimes_2703002",
+      "firstSyncedAt": "2026-08-11T18:30:56.249Z",
+      "lastSyncedAt": "2026-08-11T18:30:56.249Z",
       "uploadedCount": 0
     }
   }
