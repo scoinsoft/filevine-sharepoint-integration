@@ -72,9 +72,17 @@ Login no longer depends on one in-memory session (that would break across server
 
 Set `SESSION_SECRET` in Vercel (any long random string).
 
-### 5. Scheduled cron is disabled
+### 5. Scheduled sync at 2:00 AM Mountain Time
 
-Vercel Cron and in-app `node-cron` are both turned off. Sync only runs when someone uses the UI (one project or sync-all). The Schedule button is hidden.
+Vercel Hobby allows **one cron per day**, and cron times are UTC. This app uses:
+
+`0 8 * * *` → **08:00 UTC** = **2:00 AM Mountain Daylight Time** (most of the year). In winter (MST) that same tick is 1:00 AM.
+
+That one call starts the nightly run. It then **chains to itself** until every project is done — that is not extra cron jobs.
+
+Local `npm start` uses `node-cron` at 2:00 AM in `America/Denver` (true 2am MT including DST).
+
+The Schedule button can turn this off.
 
 ### 6. Manual sync can resume after a timeout
 

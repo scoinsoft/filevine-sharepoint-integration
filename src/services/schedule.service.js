@@ -1,14 +1,17 @@
 const fs = require('fs');
 const path = require('path');
+const cron = require('node-cron');
+const syncProjectService = require('./syncProject.service');
+const syncHistoryService = require('./syncHistory.service');
 const persistentJson = require('./persistentJson.service');
-const { isServerless } = require('../config/runtime');
+const { isServerless, shouldStopForDeadline } = require('../config/runtime');
 const { dataDir, ensureDir } = require('../config/paths');
-const { log } = require('../utils/logger');
+const { log, logError } = require('../utils/logger');
 
 const SCHEDULE_FILE = path.join(dataDir(), 'schedule.json');
 const SCHEDULE_RELATIVE = 'data/schedule.json';
 const RUN_WINDOW_MS = 3 * 60 * 60 * 1000;
-const STALE_RUN_MS = 12 * 60 * 1000;
+const STALE_RUN_MS = 8 * 60 * 1000;
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -134,7 +137,7 @@ function emptyRunState() {
 
 function getDefaultSchedule() {
   return {
-    enabled: false,
+    enabled: true,
     frequency: 'daily',
     time: '02:00',
     dayOfWeek: 1,
@@ -169,8 +172,13 @@ function normalizeSchedule(input = {}) {
 }
 
 function applyPersisted(parsed) {
-  schedule = normalizeSchedule({ ...parsed, enabled: false });
-  runState = emptyRunState();
+  schedule = normalizeSchedule(parsed);
+  const persistedRun = parsed?.run && typeof parsed.run === 'object' ? parsed.run : {};
+  runState = {
+    ...emptyRunState(),
+    ...persistedRun,
+    lastCompletedRunAt: persistedRun.lastCompletedRunAt || parsed?.lastCompletedRunAt || null,
+  };
 }
 
 function persistPayload() {
@@ -212,16 +220,28 @@ async function ensureReady() {
   const remote = await persistentJson.read(SCHEDULE_RELATIVE);
   if (remote) {
     applyPersisted(remote);
+    const looksLikeForcedOff =
+      remote.enabled === false &&
+      (remote.frequency || 'daily') === 'daily' &&
+      (remote.time || '02:00') === '02:00' &&
+      (!remote.timezone || remote.timezone === 'America/Denver');
+    if (looksLikeForcedOff) {
+      schedule.enabled = true;
+      await persist();
+    }
   } else {
     schedule = getDefaultSchedule();
+    await persist();
   }
   ready = true;
 }
 
 async function save(nextSchedule) {
-  schedule = normalizeSchedule({ ...nextSchedule, enabled: false });
+  schedule = normalizeSchedule(nextSchedule);
   await persist();
-  stopCron();
+  if (!isServerless()) {
+    restartCron();
+  }
   return getPublicSchedule();
 }
 
@@ -310,13 +330,191 @@ function getZonedParts(date, timezone) {
   };
 }
 
-function shouldStartScheduledRun() {
-  return false;
+function alreadyCompletedToday(now = new Date()) {
+  if (!runState.lastCompletedRunAt) return false;
+  const timezone = schedule.timezone || 'America/Denver';
+  const parts = getZonedParts(now, timezone);
+  const last = getZonedParts(new Date(runState.lastCompletedRunAt), timezone);
+  return last.dateKey === parts.dateKey;
 }
 
-async function runScheduledSync() {
-  log('Scheduled sync is disabled');
-  return { skipped: true, reason: 'disabled', incomplete: false };
+function shouldStartScheduledRun(now = new Date()) {
+  if (!schedule.enabled) return false;
+  if (alreadyCompletedToday(now)) return false;
+
+  const parts = getZonedParts(now, schedule.timezone || 'America/Denver');
+  if (schedule.frequency === 'weekly' && parts.dayOfWeek !== schedule.dayOfWeek) {
+    return false;
+  }
+
+  const [hour, minute] = schedule.time.split(':');
+  if (parts.hour !== hour) return false;
+  const scheduledMinute = Number(minute);
+  const currentMinute = Number(parts.minute);
+  if (Number.isNaN(scheduledMinute) || currentMinute < scheduledMinute) {
+    return false;
+  }
+  return true;
+}
+
+async function runScheduledSync(options = {}) {
+  await ensureReady();
+
+  const continueRun = Boolean(options.continueRun);
+  const force = Boolean(options.force);
+
+  if (runState.active && !isRunStale() && !continueRun) {
+    log('Scheduled sync skipped because a run is already active');
+    return { skipped: true, reason: 'already-active', incomplete: false };
+  }
+
+  const resumeExisting = Boolean(runState.active && runState.runId && (continueRun || isRunStale()));
+  const startNew = schedule.enabled && !alreadyCompletedToday() && (force || shouldStartScheduledRun());
+
+  if (!resumeExisting && !startNew) {
+    return { skipped: true, reason: 'not-due', incomplete: false };
+  }
+
+  const runStartedAt = resumeExisting ? runState.startedAt : new Date().toISOString();
+  const scheduledRunId = resumeExisting ? runState.runId : runStartedAt;
+  const startIndex = resumeExisting ? Number(runState.nextIndex) || 0 : 0;
+  const runFolder = syncHistoryService.createSyncRunFolder(runStartedAt, 'scheduled');
+
+  runState.active = true;
+  runState.startedAt = runStartedAt;
+  runState.estimatedEndAt = new Date(Date.now() + RUN_WINDOW_MS).toISOString();
+  runState.currentProjectName = null;
+  runState.heartbeatAt = new Date().toISOString();
+  runState.runId = scheduledRunId;
+  runState.nextIndex = startIndex;
+  await persist();
+
+  log('Scheduled sync started', {
+    startedAt: runState.startedAt,
+    estimatedEndAt: runState.estimatedEndAt,
+    scheduledRunId,
+    startIndex,
+    runFolder: runFolder.relativeDir,
+  });
+
+  const projectEntries = [];
+  let incomplete = false;
+
+  try {
+    const projects = await syncProjectService.listAllProjects();
+    log(`Scheduled sync processing ${projects.length} project(s) from index ${startIndex}`);
+
+    for (let index = startIndex; index < projects.length; index += 1) {
+      if (shouldStopForDeadline()) {
+        runState.nextIndex = index;
+        runState.heartbeatAt = new Date().toISOString();
+        incomplete = true;
+        await persist();
+        log('Scheduled sync pausing for function time budget', { nextIndex: index });
+        break;
+      }
+
+      const project = projects[index];
+      runState.currentProjectName = project.projectName;
+      runState.nextIndex = index;
+      runState.heartbeatAt = new Date().toISOString();
+      await persist();
+
+      try {
+        const summary = await syncProjectService.syncProject(project.projectId, project.projectName, {
+          trigger: 'scheduled',
+          scheduledRunId,
+          runFolder,
+        });
+
+        projectEntries.push({
+          projectId: project.projectId,
+          projectName: project.projectName,
+          record: {
+            success: summary.success,
+            skippedArchivedProject: Boolean(summary.skippedArchivedProject),
+            incomplete: Boolean(summary.incomplete),
+            error: summary.error || null,
+            counts: summary.counts,
+          },
+          historyFile: summary.historyFile || null,
+        });
+
+        if (summary.incomplete) {
+          runState.nextIndex = index;
+          incomplete = true;
+          await persist();
+          break;
+        }
+
+        runState.nextIndex = index + 1;
+      } catch (error) {
+        logError(`Scheduled sync failed for project ${project.projectId}`, error);
+        const failedSummary = error.syncSummary || null;
+        projectEntries.push({
+          projectId: project.projectId,
+          projectName: project.projectName,
+          error: error.message,
+          record: failedSummary
+            ? {
+                success: false,
+                error: failedSummary.error || error.message,
+                counts: failedSummary.counts,
+              }
+            : null,
+          historyFile: error.historyFile || failedSummary?.historyFile || null,
+        });
+        runState.nextIndex = index + 1;
+      }
+    }
+
+    if (!incomplete && runState.nextIndex >= projects.length) {
+      const runFinishedAt = new Date().toISOString();
+      syncHistoryService.saveScheduledRunHistory(
+        {
+          runId: scheduledRunId,
+          runFolder,
+          startedAt: runStartedAt,
+          finishedAt: runFinishedAt,
+          durationMs: Math.max(0, new Date(runFinishedAt).getTime() - new Date(runStartedAt).getTime()),
+        },
+        projectEntries
+      );
+
+      runState = {
+        ...emptyRunState(),
+        lastCompletedRunAt: runFinishedAt,
+      };
+      await persist();
+      log('Scheduled sync completed', { projects: projects.length });
+      return { skipped: false, incomplete: false, processed: projectEntries.length };
+    }
+
+    return {
+      skipped: false,
+      incomplete: true,
+      nextIndex: runState.nextIndex,
+      processed: projectEntries.length,
+    };
+  } catch (error) {
+    logError('Scheduled sync failed', error);
+
+    const runFinishedAt = new Date().toISOString();
+    syncHistoryService.saveScheduledRunHistory(
+      {
+        runId: scheduledRunId,
+        runFolder,
+        startedAt: runStartedAt,
+        finishedAt: runFinishedAt,
+        durationMs: Math.max(0, new Date(runFinishedAt).getTime() - new Date(runStartedAt).getTime()),
+      },
+      projectEntries
+    );
+    runState.active = false;
+    runState.currentProjectName = null;
+    await persist();
+    throw error;
+  }
 }
 
 function stopCron() {
@@ -328,6 +526,29 @@ function stopCron() {
 
 function restartCron() {
   stopCron();
+  if (isServerless() || !schedule.enabled) return;
+
+  const expression = buildCronExpression(schedule);
+  if (!cron.validate(expression)) {
+    logError('Invalid cron expression for schedule', new Error(expression));
+    return;
+  }
+
+  cronTask = cron.schedule(
+    expression,
+    () => {
+      runScheduledSync({ force: true }).catch((error) => logError('Scheduled sync task failed', error));
+    },
+    {
+      timezone: schedule.timezone,
+    }
+  );
+
+  log('Schedule cron started', {
+    expression,
+    timezone: schedule.timezone,
+    summary: formatScheduleSummary(schedule),
+  });
 }
 
 function init() {
@@ -335,8 +556,7 @@ function init() {
     return;
   }
   loadFromDisk();
-  schedule.enabled = false;
-  stopCron();
+  restartCron();
 }
 
 init();
