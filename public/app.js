@@ -2532,7 +2532,7 @@
       });
     } catch (error) {
       const chunkAttempt = Number(handlers._chunkAttempt || 0) + 1;
-      if (receivedSyncEvents && chunkAttempt <= 40) {
+      if (receivedSyncEvents && chunkAttempt <= 80) {
         if (onStatus) {
           onStatus({
             stage: 'continuing',
@@ -2564,7 +2564,7 @@
 
     if (summary.incomplete) {
       const chunkAttempt = Number(handlers._chunkAttempt || 0) + 1;
-      if (chunkAttempt > 40) {
+      if (chunkAttempt > 80) {
         return summary;
       }
       if (onStatus) {

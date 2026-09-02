@@ -22,6 +22,15 @@ function normalizeFilenameKey(filename) {
 const SYNC_CONCURRENCY = isServerless()
   ? Math.min(readPositiveIntEnv('SYNC_CONCURRENCY', 4), 6)
   : readPositiveIntEnv('SYNC_CONCURRENCY', 6);
+const LARGE_FILE_BYTES = 32 * 1024 * 1024;
+
+function isLargeDocument(document) {
+  const size = Number(document?.size);
+  if (!Number.isFinite(size) || size <= 0) {
+    return isServerless();
+  }
+  return isServerless() && size >= LARGE_FILE_BYTES;
+}
 
 function isUnauthorizedError(error) {
   const status = error?.response?.status;
@@ -295,6 +304,19 @@ async function syncProject(projectId, projectName, options = {}) {
     let fatalSharePointError = null;
     let stoppedForDeadline = false;
     const transferProgressThrottle = new Map();
+    let largeFileChain = Promise.resolve();
+
+    function withLargeFileGate(document, operation) {
+      if (!isLargeDocument(document)) {
+        return operation();
+      }
+      const run = largeFileChain.then(operation, operation);
+      largeFileChain = run.then(
+        () => undefined,
+        () => undefined
+      );
+      return run;
+    }
 
     function emitTransferProgress(documentId, filename, progress) {
       const bytesUploaded = Number(progress.bytesUploaded) || 0;
@@ -346,6 +368,7 @@ async function syncProject(projectId, projectName, options = {}) {
         {
           filename,
           fileSize,
+          documentId,
           onProgress: (progress) => {
             emitTransferProgress(documentId, filename, {
               ...progress,
@@ -471,94 +494,54 @@ async function syncProject(projectId, projectName, options = {}) {
 
       const hintedSize = Number(document.size) || 0;
 
-      emit('progress', {
-        stage: 'uploading',
-        current: completed + 1,
-        total,
-        percent: Math.round((completed / total) * 100),
-        currentFile: item.filename,
-        message: `Streaming ${item.filename} to SharePoint…`,
-        succeeded: results.succeeded.length,
-        failed: results.failed.length,
-      });
-      emitTransferProgress(document.documentId, item.filename, {
-        stage: 'uploading',
-        bytesUploaded: 0,
-        bytesDownloaded: 0,
-        bytesTotal: hintedSize,
-        percent: 0,
-      });
-
-      try {
-        const source = await withTokenRetry('getDownloadLink', (token) =>
-          filevineService.getDocumentDownloadSource(
-            token,
-            document.documentId,
-            document.filename
-          )
-        );
-
-        const upload = await streamUploadWithProgress(
-          source.downloadLink,
-          document.contentType || 'application/octet-stream',
-          source.filename,
-          document.documentId,
-          hintedSize
-        );
-
-        await filevineService.recordProjectUploadSuccess(
-          projectId,
-          projectName,
-          document.documentId,
-          source.filename,
-          uploadedDocumentIds,
-          uploadedFilenames
-        );
-        await filevineService.clearFailedUpload(
-          projectId,
-          projectName,
-          document.documentId,
-          failedByDocumentId
-        );
-
-        const successItem = {
-          ...item,
-          filename: source.filename,
-          sharePointPath: upload.sharePointPath,
-          size: upload.size || hintedSize || null,
-          streamed: true,
-        };
-        results.succeeded.push(successItem);
-
-        emit('file-success', {
-          ...successItem,
-          total,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-          message: `Uploaded ${source.filename}`,
-        });
-      } catch (error) {
-        if (sharepointService.isSharePointConfigError(error)) {
-          fatalSharePointError = error;
-          throw error;
+      const outcome = await withLargeFileGate(document, async () => {
+        if (shouldStopForDeadline()) {
+          stoppedForDeadline = true;
+          return 'paused';
         }
 
-        if (sharepointService.isSharePointConflictSkipError(error)) {
-          const conflictCode = sharepointService.isResourceModifiedError(error)
-            ? 'resourceModified'
-            : 'nameAlreadyExists';
-          log('Skipping SharePoint conflict (already exists / concurrent upload)', {
-            projectId,
-            documentId: document.documentId,
-            filename: item.filename,
-            errorCode: conflictCode,
-          });
+        emit('progress', {
+          stage: 'uploading',
+          current: completed + 1,
+          total,
+          percent: Math.round((completed / total) * 100),
+          currentFile: item.filename,
+          message: isLargeDocument(document)
+            ? `Streaming large file ${item.filename} to SharePoint…`
+            : `Streaming ${item.filename} to SharePoint…`,
+          succeeded: results.succeeded.length,
+          failed: results.failed.length,
+        });
+        emitTransferProgress(document.documentId, item.filename, {
+          stage: 'uploading',
+          bytesUploaded: 0,
+          bytesDownloaded: 0,
+          bytesTotal: hintedSize,
+          percent: 0,
+        });
+
+        try {
+          const source = await withTokenRetry('getDownloadLink', (token) =>
+            filevineService.getDocumentDownloadSource(
+              token,
+              document.documentId,
+              document.filename
+            )
+          );
+
+          const upload = await streamUploadWithProgress(
+            source.downloadLink,
+            document.contentType || 'application/octet-stream',
+            source.filename,
+            document.documentId,
+            hintedSize
+          );
 
           await filevineService.recordProjectUploadSuccess(
             projectId,
             projectName,
             document.documentId,
-            item.filename,
+            source.filename,
             uploadedDocumentIds,
             uploadedFilenames
           );
@@ -569,23 +552,94 @@ async function syncProject(projectId, projectName, options = {}) {
             failedByDocumentId
           );
 
-          const skippedItem = {
+          const successItem = {
             ...item,
-            skippedNameConflict: true,
-            skippedAlreadyUploaded: true,
-            skippedResourceModified: conflictCode === 'resourceModified',
+            filename: source.filename,
+            sharePointPath: upload.sharePointPath,
+            size: upload.size || hintedSize || null,
+            streamed: true,
           };
-          results.succeeded.push(skippedItem);
+          results.succeeded.push(successItem);
+
           emit('file-success', {
-            ...skippedItem,
+            ...successItem,
             total,
             succeeded: results.succeeded.length,
             failed: results.failed.length,
-            message: `Skipped (already on SharePoint): ${item.filename}`,
+            message: `Uploaded ${source.filename}`,
           });
-        } else {
+          return 'done';
+        } catch (error) {
+          if (sharepointService.isSharePointConfigError(error)) {
+            fatalSharePointError = error;
+            throw error;
+          }
+
+          if (sharepointService.isSharePointConflictSkipError(error)) {
+            const conflictCode = sharepointService.isResourceModifiedError(error)
+              ? 'resourceModified'
+              : 'nameAlreadyExists';
+            log('Skipping SharePoint conflict (already exists / concurrent upload)', {
+              projectId,
+              documentId: document.documentId,
+              filename: item.filename,
+              errorCode: conflictCode,
+            });
+
+            await filevineService.recordProjectUploadSuccess(
+              projectId,
+              projectName,
+              document.documentId,
+              item.filename,
+              uploadedDocumentIds,
+              uploadedFilenames
+            );
+            await filevineService.clearFailedUpload(
+              projectId,
+              projectName,
+              document.documentId,
+              failedByDocumentId
+            );
+
+            const skippedItem = {
+              ...item,
+              skippedNameConflict: true,
+              skippedAlreadyUploaded: true,
+              skippedResourceModified: conflictCode === 'resourceModified',
+            };
+            results.succeeded.push(skippedItem);
+            emit('file-success', {
+              ...skippedItem,
+              total,
+              succeeded: results.succeeded.length,
+              failed: results.failed.length,
+              message: `Skipped (already on SharePoint): ${item.filename}`,
+            });
+            return 'done';
+          }
+
           if (error?.code === 'UPLOAD_DEADLINE') {
             stoppedForDeadline = true;
+            const uploadedMb = sharepointService.formatMegabytes(error.bytesUploaded || 0);
+            const totalMb = sharepointService.formatMegabytes(error.totalSize || hintedSize || 0);
+            log('Paused large file transfer for function time limit; session saved for resume', {
+              projectId,
+              documentId: document.documentId,
+              filename: item.filename,
+              bytesUploaded: error.bytesUploaded || 0,
+              totalSize: error.totalSize || hintedSize || 0,
+            });
+            emit('progress', {
+              stage: 'paused',
+              current: completed,
+              total,
+              percent: Math.round((completed / total) * 100),
+              currentFile: item.filename,
+              message: `Paused ${item.filename} at ${uploadedMb} / ${totalMb} MB; will continue on the next run…`,
+              succeeded: results.succeeded.length,
+              failed: results.failed.length,
+            });
+            return 'paused';
           }
 
           logError(`Sync failed for document ${document.documentId}`, error);
@@ -593,14 +647,11 @@ async function syncProject(projectId, projectName, options = {}) {
           const failItem = {
             ...item,
             error: error.message,
-            errorCode:
-              error?.code === 'UPLOAD_DEADLINE'
-                ? 'UPLOAD_DEADLINE'
-                : sharepointService.isNameAlreadyExistsError?.(error)
-                  ? 'nameAlreadyExists'
-                  : sharepointService.isResourceModifiedError?.(error)
-                    ? 'resourceModified'
-                    : error.code || null,
+            errorCode: sharepointService.isNameAlreadyExistsError?.(error)
+              ? 'nameAlreadyExists'
+              : sharepointService.isResourceModifiedError?.(error)
+                ? 'resourceModified'
+                : error.code || null,
             localFilePath: null,
           };
           results.failed.push(failItem);
@@ -618,7 +669,12 @@ async function syncProject(projectId, projectName, options = {}) {
             failed: results.failed.length,
             message: `Failed: ${item.filename}`,
           });
+          return 'done';
         }
+      });
+
+      if (outcome === 'paused') {
+        return;
       }
 
       completed += 1;

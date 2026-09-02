@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const { sharepoint } = require('../config/env');
 const { log, logError } = require('../utils/logger');
+const inProgressUpload = require('./inProgressUpload.service');
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 const DEFAULT_TIMEOUT_MS = 180000;
@@ -141,13 +142,16 @@ function getStreamChunkBytes() {
   return UPLOAD_SESSION_CHUNK_BYTES;
 }
 
-function throwIfUploadDeadline(filename) {
+function throwIfUploadDeadline(filename, meta = null) {
   const { shouldStopForDeadline } = require('../config/runtime');
   if (!shouldStopForDeadline()) return;
   const err = new Error(
     `Stopped transferring ${filename || 'file'} to stay within the function time limit; it was not recorded as uploaded`
   );
   err.code = 'UPLOAD_DEADLINE';
+  if (meta && typeof meta === 'object') {
+    Object.assign(err, meta);
+  }
   throw err;
 }
 
@@ -449,7 +453,37 @@ async function createUploadSession(accessToken, itemPath) {
   if (!uploadUrl) {
     throw new Error('SharePoint upload session failed: missing uploadUrl');
   }
-  return uploadUrl;
+  return {
+    uploadUrl,
+    expirationDateTime: sessionResponse.data?.expirationDateTime || null,
+  };
+}
+
+function parseNextExpectedOffset(nextExpectedRanges) {
+  const first = Array.isArray(nextExpectedRanges) ? nextExpectedRanges[0] : nextExpectedRanges;
+  const match = String(first || '').match(/^(\d+)/);
+  if (!match) return 0;
+  const offset = Number(match[1]);
+  return Number.isFinite(offset) && offset >= 0 ? offset : 0;
+}
+
+async function getUploadSessionStatus(uploadUrl) {
+  if (!uploadUrl) {
+    return { valid: false, nextOffset: 0, expirationDateTime: null };
+  }
+  try {
+    const response = await axios.get(uploadUrl, {
+      timeout: Math.min(getUploadTimeoutMs(), 30000),
+      validateStatus: (status) => status === 200,
+    });
+    return {
+      valid: true,
+      nextOffset: parseNextExpectedOffset(response.data?.nextExpectedRanges),
+      expirationDateTime: response.data?.expirationDateTime || null,
+    };
+  } catch {
+    return { valid: false, nextOffset: 0, expirationDateTime: null };
+  }
 }
 
 function parseContentRangeTotal(contentRange) {
@@ -726,18 +760,27 @@ async function openDownloadStream(url) {
   return response.data;
 }
 
-async function pumpDownloadStreamToSession(stream, { uploadUrl, totalSize, contentType, onProgress, filename }) {
+async function pumpDownloadStreamToSession(
+  stream,
+  { uploadUrl, totalSize, contentType, onProgress, filename, onCheckpoint, expirationDateTime }
+) {
   const chunkBytes = getStreamChunkBytes();
   const leftoverRef = { buf: Buffer.alloc(0) };
   let offset = 0;
   let result = null;
   let lastReportedAt = 0;
+  const deadlineMeta = () => ({
+    bytesUploaded: offset,
+    uploadUrl,
+    totalSize,
+    expirationDateTime: expirationDateTime || null,
+  });
 
   reportUploadProgress(onProgress, filename, 0, totalSize);
 
   try {
     while (offset < totalSize) {
-      throwIfUploadDeadline(filename);
+      throwIfUploadDeadline(filename, deadlineMeta());
       const want = Math.min(chunkBytes, totalSize - offset);
       const chunk = await readNextStreamChunk(stream, leftoverRef, want);
       if (!chunk || chunk.length === 0) {
@@ -755,6 +798,9 @@ async function pumpDownloadStreamToSession(stream, { uploadUrl, totalSize, conte
       }
 
       offset += chunk.length;
+      if (typeof onCheckpoint === 'function') {
+        onCheckpoint(offset);
+      }
       const now = Date.now();
       if (now - lastReportedAt >= 400 || offset >= totalSize) {
         lastReportedAt = now;
@@ -775,16 +821,32 @@ async function pumpDownloadStreamToSession(stream, { uploadUrl, totalSize, conte
   throw new Error('SharePoint upload session did not complete');
 }
 
-async function transferByByteRanges({ downloadUrl, uploadUrl, totalSize, contentType, onProgress, filename }) {
+async function transferByByteRanges({
+  downloadUrl,
+  uploadUrl,
+  totalSize,
+  contentType,
+  onProgress,
+  filename,
+  startOffset = 0,
+  onCheckpoint,
+  expirationDateTime,
+}) {
   const chunkBytes = getStreamChunkBytes();
-  let offset = 0;
+  let offset = Math.max(0, Number(startOffset) || 0);
   let result = null;
   let lastReportedAt = 0;
+  const deadlineMeta = () => ({
+    bytesUploaded: offset,
+    uploadUrl,
+    totalSize,
+    expirationDateTime: expirationDateTime || null,
+  });
 
-  reportUploadProgress(onProgress, filename, 0, totalSize);
+  reportUploadProgress(onProgress, filename, offset, totalSize);
 
   while (offset < totalSize) {
-    throwIfUploadDeadline(filename);
+    throwIfUploadDeadline(filename, deadlineMeta());
     const chunkEnd = Math.min(offset + chunkBytes, totalSize);
     let chunk;
     try {
@@ -816,6 +878,9 @@ async function transferByByteRanges({ downloadUrl, uploadUrl, totalSize, content
     }
 
     offset += chunk.length;
+    if (typeof onCheckpoint === 'function') {
+      onCheckpoint(offset);
+    }
     const now = Date.now();
     if (now - lastReportedAt >= 400 || offset >= totalSize) {
       lastReportedAt = now;
@@ -830,6 +895,11 @@ async function transferByByteRanges({ downloadUrl, uploadUrl, totalSize, content
 }
 
 async function transferRemoteToUploadSession(opts) {
+  const startOffset = Math.max(0, Number(opts.startOffset) || 0);
+  if (startOffset > 0) {
+    return transferByByteRanges(opts);
+  }
+
   try {
     return await transferByByteRanges(opts);
   } catch (error) {
@@ -846,7 +916,54 @@ async function transferRemoteToUploadSession(opts) {
   }
 }
 
-async function uploadRemoteToGraph(itemPath, downloadUrl, hintedSize, contentType, onProgress, filename) {
+function createSessionCheckpoint(sessionKey, { filename, sharePointPath, uploadUrl, totalSize, expirationDateTime }) {
+  if (!sessionKey?.projectId || sessionKey.documentId == null) {
+    return { queue() {}, flush: async () => {} };
+  }
+
+  const persistEveryBytes = Math.max(getStreamChunkBytes() * 8, 32 * 1024 * 1024);
+  let lastQueuedOffset = -1;
+  let chain = Promise.resolve();
+
+  function queue(offset, { force = false } = {}) {
+    const nextOffset = Math.max(0, Number(offset) || 0);
+    if (!force && nextOffset - lastQueuedOffset < persistEveryBytes) {
+      return;
+    }
+    lastQueuedOffset = nextOffset;
+    chain = chain
+      .then(() =>
+        inProgressUpload.save(sessionKey.projectId, sessionKey.documentId, {
+          filename,
+          sharePointPath,
+          uploadUrl,
+          totalSize,
+          nextOffset,
+          expirationDateTime,
+        })
+      )
+      .catch((error) => {
+        logError('Failed to persist in-progress SharePoint upload session', error);
+      });
+  }
+
+  async function flush(offset) {
+    queue(offset, { force: true });
+    await chain;
+  }
+
+  return { queue, flush };
+}
+
+async function uploadRemoteToGraph(
+  itemPath,
+  downloadUrl,
+  hintedSize,
+  contentType,
+  onProgress,
+  filename,
+  sessionKey = null
+) {
   return withAccessToken(async (accessToken) => {
     const totalSize = await probeRemoteSize(downloadUrl, hintedSize);
     log('Resolved remote file size for stream upload', {
@@ -857,28 +974,83 @@ async function uploadRemoteToGraph(itemPath, downloadUrl, hintedSize, contentTyp
     });
 
     if (totalSize <= SIMPLE_UPLOAD_MAX_BYTES) {
+      if (sessionKey) {
+        await inProgressUpload.clear(sessionKey.projectId, sessionKey.documentId);
+      }
       const buffer = await downloadRemoteToBuffer(downloadUrl, totalSize);
       return uploadSmallFile(accessToken, itemPath, buffer, contentType, onProgress, filename);
     }
 
     let sessionAttempts = 0;
     const maxSessionAttempts = 3;
+    let resumeTried = false;
 
     while (sessionAttempts < maxSessionAttempts) {
       sessionAttempts += 1;
-      const uploadUrl = await createUploadSession(accessToken, itemPath);
+      let uploadUrl = null;
+      let expirationDateTime = null;
+      let startOffset = 0;
+
+      if (!resumeTried && sessionKey) {
+        resumeTried = true;
+        const saved = await inProgressUpload.load(sessionKey.projectId, sessionKey.documentId);
+        if (saved?.uploadUrl && Number(saved.totalSize) === totalSize) {
+          const status = await getUploadSessionStatus(saved.uploadUrl);
+          if (status.valid && status.nextOffset < totalSize) {
+            uploadUrl = saved.uploadUrl;
+            startOffset = status.nextOffset;
+            expirationDateTime = status.expirationDateTime || saved.expirationDateTime || null;
+            log('Resuming SharePoint upload session', {
+              filename,
+              startOffset,
+              totalSize,
+              percent: totalSize > 0 ? Math.round((startOffset / totalSize) * 100) : 0,
+            });
+          }
+        }
+      }
+
+      if (!uploadUrl) {
+        const created = await createUploadSession(accessToken, itemPath);
+        uploadUrl = created.uploadUrl;
+        expirationDateTime = created.expirationDateTime;
+        startOffset = 0;
+      }
+
+      const checkpoint = createSessionCheckpoint(sessionKey, {
+        filename,
+        sharePointPath: itemPath,
+        uploadUrl,
+        totalSize,
+        expirationDateTime,
+      });
+      checkpoint.queue(startOffset, { force: true });
+
       try {
-        return await transferRemoteToUploadSession({
+        const result = await transferRemoteToUploadSession({
           downloadUrl,
           uploadUrl,
           totalSize,
           contentType,
           onProgress,
           filename,
+          startOffset,
+          expirationDateTime,
+          onCheckpoint: (offset) => checkpoint.queue(offset),
         });
+        if (sessionKey) {
+          await inProgressUpload.clear(sessionKey.projectId, sessionKey.documentId);
+        }
+        return result;
       } catch (sessionError) {
         if (sessionError.code === 'UPLOAD_DEADLINE') {
+          const offset =
+            Number(sessionError.bytesUploaded) >= 0 ? Number(sessionError.bytesUploaded) : startOffset;
+          await checkpoint.flush(offset);
           throw sessionError;
+        }
+        if (sessionKey) {
+          await inProgressUpload.clear(sessionKey.projectId, sessionKey.documentId);
         }
         if (isResourceModifiedError(sessionError) && sessionAttempts < maxSessionAttempts) {
           log('SharePoint chunk conflict; restarting upload session', {
@@ -921,7 +1093,7 @@ async function uploadLargeFileFromPath(accessToken, itemPath, filePath, fileSize
 
   while (sessionAttempts < maxSessionAttempts) {
     sessionAttempts += 1;
-    const uploadUrl = await createUploadSession(accessToken, itemPath);
+    const { uploadUrl } = await createUploadSession(accessToken, itemPath);
     const handle = await fs.promises.open(filePath, 'r');
     let offset = 0;
     let result = null;
@@ -1028,10 +1200,13 @@ async function uploadToSharePoint({
   filePath,
   downloadUrl,
   fileSize: hintedFileSize,
+  documentId,
   onProgress,
 }) {
   const sharePointPath = buildSharePointPath(projectName, filename);
   const mimeType = contentType || 'application/octet-stream';
+  const sessionKey =
+    projectId != null && documentId != null ? { projectId, documentId } : null;
 
   if (downloadUrl) {
     log('Streaming Filevine → SharePoint via Microsoft Graph', {
@@ -1055,7 +1230,8 @@ async function uploadToSharePoint({
               hintedFileSize,
               mimeType,
               onProgress,
-              filename
+              filename,
+              sessionKey
             )
           );
 
@@ -1248,6 +1424,7 @@ async function uploadFromDownloadUrl(downloadUrl, projectId, projectName, conten
     contentType: contentType || 'application/octet-stream',
     downloadUrl,
     fileSize: options.fileSize,
+    documentId: options.documentId,
     onProgress: typeof options.onProgress === 'function' ? options.onProgress : null,
   });
 }

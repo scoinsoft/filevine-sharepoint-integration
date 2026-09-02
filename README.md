@@ -154,10 +154,10 @@ Or push to the connected Git branch.
 2. Function authenticates to Filevine and SharePoint
 3. It lists documents, skips ones already uploaded, then **streams** the rest Filevine → Graph (chunked upload session; no full file on `/tmp`)
 4. After each success it writes the manifest to SharePoint `_sync-state`
-5. About 20 seconds before the 300s limit, it stops starting new files (and will abort a chunked transfer in progress) and returns `incomplete: true`
-6. The UI retries that project; files already uploaded are skipped
+5. About 20 seconds before the 300s limit, it **pauses** the current large file, saves the Graph upload session, and returns `incomplete: true`
+6. The UI retries that project. The next run **resumes** the same SharePoint upload session from the last committed byte instead of starting over.
 
-A file that is still transferring when the time budget runs out is **not** marked uploaded, so the next run will retry it.
+A 6 GB video may take several 5-minute function runs. Large files (32 MB+) upload one at a time so they do not compete for the time budget.
 
 ## Useful paths
 
@@ -174,7 +174,7 @@ A file that is still transferring when the time budget runs out is **not** marke
 
 ## Limits to know
 
-- Streaming removes the `/tmp` size limit, but a single 6 GB file can still exceed the **300s** function timeout. Retry the project; the file will start again (Graph sessions are not persisted across invocations)
+- Streaming removes the `/tmp` size limit. A 6 GB file still needs several Vercel function runs; the Graph upload session is saved and resumed
 - First Vercel deploy does not include local `upload_history/`; SharePoint folder listing is used so files are not uploaded twice
 - Hobby plan timeouts are usually too small for a full firm library
 - Settings saved in the UI persist to SharePoint `_sync-state` on Vercel; they also still read from env vars
