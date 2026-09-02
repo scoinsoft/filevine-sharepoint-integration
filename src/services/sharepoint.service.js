@@ -753,9 +753,22 @@ async function listFolderFileNames(relativeFolderPath) {
   return children.filter((item) => item?.file).map((item) => String(item.name || '')).filter(Boolean);
 }
 
+const FOLDER_NAME_CACHE_RELATIVE = 'sharepoint-project-folders.json';
+const ROOT_FOLDER_CACHE_MS = 6 * 60 * 60 * 1000;
+
 let cachedRootFolderNames = null;
 let cachedRootFolderNamesAt = 0;
-const ROOT_FOLDER_CACHE_MS = 60 * 1000;
+
+function folderNameSetFromList(names) {
+  const set = new Set();
+  for (const name of names || []) {
+    const value = String(name || '').trim().toLowerCase();
+    if (value && !value.startsWith('_') && !value.startsWith('.')) {
+      set.add(value);
+    }
+  }
+  return set;
+}
 
 async function getRootProjectFolderNameSet({ forceRefresh = false } = {}) {
   if (
@@ -764,6 +777,20 @@ async function getRootProjectFolderNameSet({ forceRefresh = false } = {}) {
     Date.now() - cachedRootFolderNamesAt < ROOT_FOLDER_CACHE_MS
   ) {
     return cachedRootFolderNames;
+  }
+
+  if (!forceRefresh) {
+    try {
+      const stored = await readStateJson(FOLDER_NAME_CACHE_RELATIVE);
+      const storedAt = stored?.updatedAt ? new Date(stored.updatedAt).getTime() : 0;
+      if (Array.isArray(stored?.names) && Date.now() - storedAt < ROOT_FOLDER_CACHE_MS) {
+        cachedRootFolderNames = folderNameSetFromList(stored.names);
+        cachedRootFolderNamesAt = Date.now();
+        return cachedRootFolderNames;
+      }
+    } catch {
+      // Fall through to a live SharePoint listing.
+    }
   }
 
   const children = await listFolderChildren(getRootFolder());
@@ -776,6 +803,12 @@ async function getRootProjectFolderNameSet({ forceRefresh = false } = {}) {
   }
   cachedRootFolderNames = names;
   cachedRootFolderNamesAt = Date.now();
+
+  writeStateJson(FOLDER_NAME_CACHE_RELATIVE, {
+    updatedAt: new Date().toISOString(),
+    names: [...names],
+  }).catch((error) => logError('Failed to cache SharePoint project folder names', error));
+
   return names;
 }
 

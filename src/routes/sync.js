@@ -5,6 +5,7 @@ const scheduleService = require('../services/schedule.service');
 const syncRunService = require('../services/syncRun.service');
 const projectUploadHistoryService = require('../services/projectUploadHistory.service');
 const removeArchivedSharePointFoldersService = require('../services/removeArchivedSharePointFolders.service');
+const sharepointService = require('../services/sharepoint.service');
 const { log, logError } = require('../utils/logger');
 
 const router = express.Router();
@@ -58,6 +59,12 @@ router.get('/projects', async (req, res) => {
     const accessToken = await filevineService.authenticate();
     const page = await filevineService.listProjectsPage(accessToken, { offset, limit });
     const uploadedIds = new Set(await projectUploadHistoryService.getUploadedProjectIds());
+    let sharePointFolders = new Set();
+    try {
+      sharePointFolders = await sharepointService.getRootProjectFolderNameSet();
+    } catch (error) {
+      logError('Failed to list SharePoint project folders for upload badges', error);
+    }
 
     res.json({
       success: true,
@@ -68,7 +75,10 @@ router.get('/projects', async (req, res) => {
       hasMore: page.hasMore,
       uploadedProjectCount: uploadedIds.size,
       projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate, isArchived }) => {
-        const alreadyUploaded = uploadedIds.has(String(projectId));
+        const folderName = sharepointService.sanitizeFolderName(projectName).toLowerCase();
+        // Keep this definition stable: uploaded if history index OR SharePoint folder exists.
+        const alreadyUploaded =
+          uploadedIds.has(String(projectId)) || sharePointFolders.has(folderName);
         return {
           projectId,
           projectName,

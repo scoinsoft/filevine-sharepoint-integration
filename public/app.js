@@ -3099,13 +3099,17 @@
 
       for (const page of state.paging.pageCache.values()) {
         for (const project of page?.projects || []) {
-          const alreadyUploaded = state.uploadedProjectIds.has(String(project.projectId));
+          const alreadyUploaded =
+            Boolean(project.alreadyUploaded) ||
+            state.uploadedProjectIds.has(String(project.projectId));
           project.alreadyUploaded = alreadyUploaded;
           project.isNew = !alreadyUploaded;
         }
       }
       for (const project of state.projects) {
-        const alreadyUploaded = state.uploadedProjectIds.has(String(project.projectId));
+        const alreadyUploaded =
+          Boolean(project.alreadyUploaded) ||
+          state.uploadedProjectIds.has(String(project.projectId));
         project.alreadyUploaded = alreadyUploaded;
         project.isNew = !alreadyUploaded;
       }
