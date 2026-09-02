@@ -20,7 +20,7 @@ function normalizeFilenameKey(filename) {
 }
 
 const SYNC_CONCURRENCY = isServerless()
-  ? Math.min(readPositiveIntEnv('SYNC_CONCURRENCY', 2), 3)
+  ? Math.min(readPositiveIntEnv('SYNC_CONCURRENCY', 4), 6)
   : readPositiveIntEnv('SYNC_CONCURRENCY', 6);
 
 function isUnauthorizedError(error) {
@@ -680,6 +680,17 @@ async function syncProject(projectId, projectName, options = {}) {
       })()
     );
     await Promise.all(workers);
+
+    try {
+      await filevineService.flushProjectUploadManifest(
+        projectId,
+        projectName,
+        uploadedDocumentIds,
+        uploadedFilenames
+      );
+    } catch (flushError) {
+      logError('Failed to flush upload manifest', flushError);
+    }
 
     if (fatalSharePointError) {
       throw fatalSharePointError;

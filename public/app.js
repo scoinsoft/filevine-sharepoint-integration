@@ -1,7 +1,7 @@
 (() => {
   const SESSION_KEY = 'fv_sp_session_token';
   const SYNC_ALL_SNAPSHOT_KEY = 'fv_sp_sync_all_snapshot_v1';
-  const SYNC_ALL_PROJECT_CONCURRENCY = 3;
+  const SYNC_ALL_PROJECT_CONCURRENCY = 5;
   const MAX_SINGLE_RESULT_ROWS = 600;
   const MAX_SYNC_ALL_HISTORY_ROWS = 200;
   const TRANSFER_TOAST_MIN_INTERVAL_MS = 350;

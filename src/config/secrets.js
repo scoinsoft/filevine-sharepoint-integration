@@ -24,7 +24,7 @@ const BUILTIN_ENV = {
   APP_PASSWORD: 'admin',
   SESSION_SECRET: 'fv-sp-session-doehlinglaw-filevine-sharepoint-sync',
   CRON_SECRET: 'fv-sp-cron-doehlinglaw-filevine-sharepoint-sync',
-  SYNC_CONCURRENCY: '2',
+  SYNC_CONCURRENCY: '4',
   SHAREPOINT_TIMEOUT_MS: '120000',
   FUNCTION_MAX_DURATION_MS: '270000',
 };

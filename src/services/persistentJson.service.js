@@ -38,12 +38,12 @@ async function read(relativePath) {
   }
 }
 
-async function write(relativePath, data) {
+async function write(relativePath, data, { remote = true } = {}) {
   const filePath = localPath(relativePath);
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 
-  if (!isServerless()) {
+  if (!isServerless() || !remote) {
     return filePath;
   }
 

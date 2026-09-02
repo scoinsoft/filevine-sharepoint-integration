@@ -613,6 +613,9 @@ async function uploadToSharePoint({
         };
       } catch (attemptError) {
         lastError = attemptError;
+        if (isResourceModifiedError(attemptError) && attempt >= 2) {
+          throw attemptError;
+        }
         if (attempt < MAX_RETRIES && isRetryableUploadError(attemptError)) {
           const backoffMs = 1000 * attempt;
           log('Retrying SharePoint upload after error', {
@@ -636,8 +639,17 @@ async function uploadToSharePoint({
 
     throw lastError || new Error('SharePoint upload failed: no response received');
   } catch (error) {
-    logError('SharePoint upload failed', error);
-    log('Upload debug context', { projectId, filename, sharePointPath });
+    if (isSharePointConflictSkipError(error)) {
+      log('SharePoint upload conflict; treating as already uploaded', {
+        projectId,
+        filename,
+        sharePointPath,
+        code: getGraphErrorCode(error) || 'conflict',
+      });
+    } else {
+      logError('SharePoint upload failed', error);
+      log('Upload debug context', { projectId, filename, sharePointPath });
+    }
     throw formatGraphError(error, 'upload');
   }
 }
@@ -800,17 +812,30 @@ async function writeStateJson(relativePath, data) {
   const itemPath = buildStateItemPath(relativePath);
   const body = Buffer.from(JSON.stringify(data, null, 2), 'utf8');
   return withAccessToken(async (accessToken) => {
-    await axios.put(buildItemContentUrl(itemPath), body, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: getUploadTimeoutMs(),
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      validateStatus: (status) => status >= 200 && status < 300,
-    });
-    return itemPath;
+    let lastError;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        await axios.put(buildItemContentUrl(itemPath), body, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: getUploadTimeoutMs(),
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+          validateStatus: (status) => status >= 200 && status < 300,
+        });
+        return itemPath;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 4 && (isResourceModifiedError(error) || error?.response?.status === 429)) {
+          await delay(200 * attempt);
+          continue;
+        }
+        throw formatGraphError(error, 'write');
+      }
+    }
+    throw formatGraphError(lastError, 'write');
   });
 }
 

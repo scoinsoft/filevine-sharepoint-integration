@@ -7,7 +7,6 @@ const { isServerless } = require('../config/runtime');
 const { downloadsDir, uploadHistoryDir, failedHistoryDir, ensureDir } = require('../config/paths');
 const { log, logError } = require('../utils/logger');
 const { inspectDocumentResponse, logInspectionReport } = require('../utils/documentInspector');
-const projectUploadHistoryService = require('./projectUploadHistory.service');
 const persistentJson = require('./persistentJson.service');
 
 const DOWNLOAD_LINK_RESPONSE_FILE = path.join(downloadsDir(), 'download-link-response.json');
@@ -469,7 +468,8 @@ async function readProjectUploadManifest(projectId, projectName) {
   }
 }
 
-let manifestWriteChain = Promise.resolve();
+let manifestWriteChains = new Map();
+const SHAREPOINT_MANIFEST_FLUSH_EVERY = 8;
 const failedHistoryWriteChains = new Map();
 
 function getFailedHistoryPath(projectId, projectName, { create = false } = {}) {
@@ -671,6 +671,46 @@ function clearFailedUpload(projectId, projectName, documentId, failedByDocumentI
   );
 }
 
+function queueManifestWrite(projectId, projectName, writer) {
+  const key = getProjectFolderLabel(projectId, projectName) || String(projectId);
+  const chain = manifestWriteChains.get(key) || Promise.resolve();
+  const next = chain.then(() => writer()).catch((error) => {
+    logError('Failed to write upload manifest (upload still counted in this run)', error);
+    return null;
+  });
+  manifestWriteChains.set(
+    key,
+    next.finally(() => {
+      if (manifestWriteChains.get(key) === next) {
+        manifestWriteChains.delete(key);
+      }
+    })
+  );
+  return next;
+}
+
+function buildManifestPayload(projectId, projectName, uploadedDocumentIds, uploadedFilenames) {
+  return {
+    projectId: String(projectId),
+    projectName,
+    updatedAt: new Date().toISOString(),
+    uploadedDocumentIds: [...uploadedDocumentIds],
+    uploadedFilenames: [...uploadedFilenames],
+  };
+}
+
+async function persistManifestPayload(projectId, projectName, payload, { sharePoint = true } = {}) {
+  const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: true });
+  if (isServerless()) {
+    await persistentJson.write(getUploadHistoryRelative(projectId, projectName), payload, {
+      remote: sharePoint,
+    });
+  } else {
+    fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
+  }
+  return manifestPath;
+}
+
 function recordProjectUploadSuccess(
   projectId,
   projectName,
@@ -679,46 +719,54 @@ function recordProjectUploadSuccess(
   uploadedDocumentIds,
   uploadedFilenames
 ) {
-  manifestWriteChain = manifestWriteChain
-    .then(async () => {
-      const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: true });
-      const documentKey = String(documentId);
-      const fileKey = String(filename || '');
+  return queueManifestWrite(projectId, projectName, async () => {
+    const documentKey = String(documentId);
+    const fileKey = String(filename || '');
+    uploadedDocumentIds.add(documentKey);
+    if (fileKey) {
+      uploadedFilenames.add(fileKey);
+    }
 
-      uploadedDocumentIds.add(documentKey);
-      if (fileKey) {
-        uploadedFilenames.add(fileKey);
-      }
+    const payload = buildManifestPayload(
+      projectId,
+      projectName,
+      uploadedDocumentIds,
+      uploadedFilenames
+    );
+    const pendingKey = `_count:${getProjectFolderLabel(projectId, projectName) || projectId}`;
+    const pending = (recordProjectUploadSuccess._pendingCount ||= new Map());
+    const nextCount = (pending.get(pendingKey) || 0) + 1;
+    pending.set(pendingKey, nextCount);
 
-      const payload = {
-        projectId: String(projectId),
-        projectName,
-        updatedAt: new Date().toISOString(),
-        uploadedDocumentIds: [...uploadedDocumentIds],
-        uploadedFilenames: [...uploadedFilenames],
-      };
+    const flushToSharePoint = !isServerless() || nextCount >= SHAREPOINT_MANIFEST_FLUSH_EVERY;
+    if (flushToSharePoint) {
+      pending.set(pendingKey, 0);
+    }
 
-      if (isServerless()) {
-        await persistentJson.write(getUploadHistoryRelative(projectId, projectName), payload);
-      } else {
-        fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
-      }
-      try {
-        await projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
-          uploadedCount: uploadedDocumentIds.size,
-          folderLabel: getProjectFolderLabel(projectId, projectName),
-        });
-      } catch (indexError) {
-        logError('Failed to update project upload history index', indexError);
-      }
-      return manifestPath;
-    })
-    .catch((error) => {
-      logError('Failed to write upload manifest (upload still counted in this run)', error);
-      return null;
+    return persistManifestPayload(projectId, projectName, payload, {
+      sharePoint: flushToSharePoint,
     });
+  });
+}
 
-  return manifestWriteChain;
+async function flushProjectUploadManifest(projectId, projectName, uploadedDocumentIds, uploadedFilenames) {
+  if (projectId == null) {
+    return null;
+  }
+  return queueManifestWrite(projectId, projectName, async () => {
+    const pendingKey = `_count:${getProjectFolderLabel(projectId, projectName) || projectId}`;
+    const pending = recordProjectUploadSuccess._pendingCount;
+    if (pending) {
+      pending.set(pendingKey, 0);
+    }
+    const payload = buildManifestPayload(
+      projectId,
+      projectName,
+      uploadedDocumentIds,
+      uploadedFilenames
+    );
+    return persistManifestPayload(projectId, projectName, payload, { sharePoint: true });
+  });
 }
 
 function getExistingDownload(filename, projectId, projectName, documentId) {
@@ -985,6 +1033,7 @@ module.exports = {
   deleteLocalDownload,
   readProjectUploadManifest,
   recordProjectUploadSuccess,
+  flushProjectUploadManifest,
   readFailedUploadHistory,
   recordFailedUpload,
   clearFailedUpload,

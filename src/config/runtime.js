@@ -27,7 +27,7 @@ function getStopBufferMs() {
   if (Number.isFinite(configured) && configured > 0) {
     return Math.floor(configured);
   }
-  return isServerless() ? 45000 : 0;
+  return isServerless() ? 20000 : 0;
 }
 
 function runWithRequestContext(store, fn) {

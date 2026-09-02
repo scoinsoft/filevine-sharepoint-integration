@@ -42,6 +42,10 @@ app.use(async (req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
