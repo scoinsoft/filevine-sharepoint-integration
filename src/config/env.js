@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./secrets');
 
 const settingsService = require('../services/settings.service');
 
@@ -54,8 +55,8 @@ function validateEnv() {
 module.exports = {
   port: Number(process.env.PORT) || 3000,
   auth: {
-    username: () => process.env.APP_USERNAME,
-    password: () => process.env.APP_PASSWORD,
+    username: () => process.env.APP_USERNAME || '',
+    password: () => process.env.APP_PASSWORD || '',
   },
   filevine: {
     clientId: () => getEnv('FILEVINE_CLIENT_ID'),

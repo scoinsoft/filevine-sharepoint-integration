@@ -1,0 +1,45 @@
+/**
+ * Built-in credentials used when process.env is empty (e.g. Vercel with no
+ * project Environment Variables). Values from `.env` or the Vercel dashboard
+ * always win when set.
+ *
+ * Keep this repo private. Anyone with the source can use these secrets.
+ */
+const BUILTIN_ENV = {
+  FILEVINE_CLIENT_ID: '85105ea4-32f5-4a4f-ae88-51d0c61b4ba5',
+  FILEVINE_CLIENT_SECRET: '9A4kRn3ei!{PmT~Yl>LRm(=g-',
+  FILEVINE_PAT: '8EED7A6421C76339B8A13F20652362F104B37B53D256DEAE0C70C39484063B44',
+  FILEVINE_ORG_ID: '156',
+  FILEVINE_USER_ID: '24237',
+  FILEVINE_TOKEN_URL: 'https://identity.filevine.com/connect/token',
+  FILEVINE_API: 'https://api.filevineapp.com/fv-app/v2',
+  AZURE_TENANT_ID: 'doehlinglaw.onmicrosoft.com',
+  AZURE_CLIENT_ID: 'a4b89d8f-700b-4d8c-97da-54221c7fc264',
+  AZURE_CLIENT_SECRET: 'rge8Q~j5tCKl_Alqv3lfHjwXF7ED0g5KAgrTvaxO',
+  SHAREPOINT_SITE_ID:
+    'doehlinglaw.sharepoint.com,468d8315-b040-4b38-af55-4a75c8817706,97140285-0556-4a5a-9475-a46b94d5f789',
+  SHAREPOINT_DRIVE_ID: 'b!FYONRkCwOEuvVUp1yIF3BoUCFJdWBVpKlHWka5TV94kB4A8WAVSvQKKT3jC8xTOj',
+  SHAREPOINT_ROOT_FOLDER: 'Filevine',
+  APP_USERNAME: 'admin',
+  APP_PASSWORD: 'admin',
+  SESSION_SECRET: 'fv-sp-session-doehlinglaw-filevine-sharepoint-sync',
+  CRON_SECRET: 'fv-sp-cron-doehlinglaw-filevine-sharepoint-sync',
+  SYNC_CONCURRENCY: '2',
+  SHAREPOINT_TIMEOUT_MS: '120000',
+  FUNCTION_MAX_DURATION_MS: '270000',
+};
+
+function applyBuiltinEnv() {
+  for (const [key, value] of Object.entries(BUILTIN_ENV)) {
+    if (process.env[key] === undefined || process.env[key] === '') {
+      process.env[key] = value;
+    }
+  }
+}
+
+applyBuiltinEnv();
+
+module.exports = {
+  BUILTIN_ENV,
+  applyBuiltinEnv,
+};

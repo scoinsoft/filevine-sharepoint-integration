@@ -6,7 +6,16 @@ const { isVercel } = require('../config/runtime');
 
 const router = express.Router();
 
+function isVercelCronRequest(req) {
+  const agent = String(req.headers['user-agent'] || '');
+  return agent.startsWith('vercel-cron/');
+}
+
 function authorizeCron(req, res, next) {
+  if (isVercelCronRequest(req)) {
+    return next();
+  }
+
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     if (isVercel()) {

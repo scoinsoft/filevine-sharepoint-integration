@@ -120,41 +120,17 @@ Import this Git repo in the Vercel dashboard, or from the project folder:
 npx vercel
 ```
 
-### 2. Set environment variables
+### 2. Environment variables (optional)
 
-In Vercel → Project → Settings → Environment Variables, add everything from `.env` **except** `PORT`.
+You do **not** need to paste secrets into the Vercel dashboard.
 
-Required:
+Filevine, Azure/SharePoint, login, session, and cron values are already built into `src/config/secrets.js`. The app fills `process.env` from that file whenever a variable is missing.
 
-| Variable | Purpose |
-|---|---|
-| `FILEVINE_CLIENT_ID` | Filevine OAuth client |
-| `FILEVINE_CLIENT_SECRET` | Filevine OAuth secret |
-| `FILEVINE_PAT` | Filevine personal access token |
-| `FILEVINE_ORG_ID` | Filevine org |
-| `FILEVINE_USER_ID` | Filevine user |
-| `FILEVINE_TOKEN_URL` | Usually `https://identity.filevine.com/connect/token` |
-| `FILEVINE_API` | Usually `https://api.filevineapp.com/fv-app/v2` |
-| `AZURE_TENANT_ID` | Azure AD tenant |
-| `AZURE_CLIENT_ID` | App registration client ID |
-| `AZURE_CLIENT_SECRET` | App registration secret |
-| `SHAREPOINT_SITE_ID` | SharePoint site id |
-| `SHAREPOINT_DRIVE_ID` | Document library drive id |
-| `SHAREPOINT_ROOT_FOLDER` | Root folder name, default `Filevine` |
-| `APP_USERNAME` | Login username |
-| `APP_PASSWORD` | Login password |
-| `SESSION_SECRET` | HMAC secret for login tokens |
-| `CRON_SECRET` | Shared secret for `/api/cron/sync` |
+If a value *is* set in Vercel or in local `.env`, that value wins.
 
-Optional:
+Keep this Git repo **private**. Anyone with the source can use the built-in credentials.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `SYNC_CONCURRENCY` | `2` on Vercel, `6` locally | Parallel file transfers |
-| `SHAREPOINT_TIMEOUT_MS` | `120000` on Vercel | Graph upload timeout |
-| `FUNCTION_MAX_DURATION_MS` | `270000` | Stop starting new files before Vercel kills the function |
-
-Never commit `.env`.
+Login defaults: `admin` / `admin`
 
 ### 3. Deploy
 
@@ -191,6 +167,7 @@ Scheduled sync uses the same project sync code, one project after another, with 
 | `src/app.js` | Express app (listen locally, export for Vercel) |
 | `api/index.js` | Vercel function entry |
 | `vercel.json` | Rewrites, `maxDuration`, cron |
+| `src/config/secrets.js` | Built-in Filevine/SharePoint/login values (used if Vercel env is empty) |
 | `src/config/runtime.js` | Detects Vercel and enforces the time budget |
 | `src/services/persistentJson.service.js` | Disk locally, SharePoint on Vercel |
 | `src/routes/cron.js` | Scheduled sync endpoint |
