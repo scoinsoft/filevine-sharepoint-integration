@@ -869,7 +869,6 @@
     hideSessionConflictModal();
     refreshResumeSnapshot();
     updateSyncAllControls();
-    startSchedulePolling();
   }
 
   function showLoginError(message) {
