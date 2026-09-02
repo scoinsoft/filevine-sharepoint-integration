@@ -137,11 +137,11 @@ function emptyRunState() {
 
 function getDefaultSchedule() {
   return {
-    enabled: false,
+    enabled: true,
     frequency: 'daily',
     time: '02:00',
     dayOfWeek: 1,
-    timezone: getSystemTimezone(),
+    timezone: 'America/Denver',
   };
 }
 
@@ -165,7 +165,7 @@ function normalizeSchedule(input = {}) {
   if (typeof input.timezone === 'string' && input.timezone.trim()) {
     next.timezone = resolveTimezone(input.timezone);
   } else {
-    next.timezone = getSystemTimezone();
+    next.timezone = 'America/Denver';
   }
 
   return next;
@@ -332,11 +332,6 @@ function shouldStartScheduledRun(now = new Date()) {
 
   if (schedule.frequency === 'weekly' && parts.dayOfWeek !== schedule.dayOfWeek) {
     return false;
-  }
-
-  // Vercel cron invokes this endpoint; run once per local schedule-day when enabled.
-  if (isServerless()) {
-    return true;
   }
 
   const [hour, minute] = schedule.time.split(':');

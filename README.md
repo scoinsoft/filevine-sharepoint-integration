@@ -67,10 +67,10 @@ Set `SESSION_SECRET` in Vercel (any long random string).
 
 On Vercel:
 
-- `GET/POST /api/cron/sync` is called by Vercel Cron every 5 minutes (`vercel.json`)
+- `GET/POST /api/cron/sync` is called by Vercel Cron once a day at **2:00 AM Mountain Time** (`vercel.json` fires at 08:00 and 09:00 UTC so it stays on 2:00 AM through DST)
+- The in-app schedule defaults to daily 2:00 AM `America/Denver`
 - Each invocation syncs as many projects/files as it can before the function time limit
-- If work remains, it chains another invocation (`waitUntil`) and/or resumes on the next cron tick
-- Enable/disable and weekly day still come from the in-app Schedule UI
+- If work remains, it chains another invocation (`waitUntil`) so the 2:00 AM run can finish without a 5-minute cron
 
 Protect this route with `CRON_SECRET`. Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 
@@ -107,10 +107,7 @@ npm run dev
 
 ## Deploy to Vercel
 
-**Use Vercel Pro** if you can. File sync needs:
-
-- Function `maxDuration` of **300 seconds** (Hobby is 60s)
-- Cron every 5 minutes (Hobby only allows a daily cron)
+**Use Vercel Pro** if you can. File sync needs a function `maxDuration` of **300 seconds** (Hobby is 60s). Daily cron at 2:00 AM MT works on Hobby.
 
 ### 1. Create the project
 
