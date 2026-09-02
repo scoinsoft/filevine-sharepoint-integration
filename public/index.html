@@ -434,7 +434,7 @@
           <div id="schedule-success" class="mb-4 hidden rounded border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700"></div>
 
           <div class="mb-4 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            When a scheduled sync starts, it typically takes about <strong>2–3 hours</strong> to finish. During that time, manual uploads are disabled — you won't be able to use <strong>Send project files to SharePoint</strong> or <strong>Sync all to SharePoint</strong>.
+            On Vercel, scheduled sync runs in short background batches so it can finish a large library over time. While a batch is running, manual uploads are temporarily disabled.
           </div>
 
           <label class="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">

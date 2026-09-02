@@ -11,9 +11,9 @@ router.get('/', (req, res) => {
   });
 });
 
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   try {
-    const settings = settingsService.updateFromApiPayload(req.body || {});
+    const settings = await settingsService.updateFromApiPayload(req.body || {});
     filevineService.clearCachedToken();
 
     res.json({

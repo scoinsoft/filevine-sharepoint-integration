@@ -1,9 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const filevineService = require('./filevine.service');
+const { isServerless } = require('../config/runtime');
+const { syncHistoryDir } = require('../config/paths');
 const { log, logError } = require('../utils/logger');
 
-const SYNC_HISTORY_DIR = path.join(process.cwd(), 'sync_history');
+const SYNC_HISTORY_DIR = syncHistoryDir();
 const RUN_SUMMARY_FILENAME = 'run-summary.json';
 
 function ensureDir(dirPath) {
@@ -27,6 +29,17 @@ function formatRunFolderName(isoString) {
 
 function createSyncRunFolder(startedAt, trigger = 'manual') {
   const folderName = formatRunFolderName(startedAt);
+  if (isServerless()) {
+    return {
+      folderName,
+      dirPath: null,
+      relativeDir: `sync_history/${folderName}`,
+      startedAt,
+      trigger,
+      ephemeral: true,
+    };
+  }
+
   const dirPath = path.join(SYNC_HISTORY_DIR, folderName);
   ensureDir(dirPath);
 
@@ -164,8 +177,15 @@ function buildProjectSyncRecord(summary, meta = {}) {
 
 function saveProjectSyncHistory(summary, meta = {}) {
   try {
-    if (!meta.runFolder?.dirPath) {
-      throw new Error('runFolder is required to save project sync history');
+    if (isServerless() || !meta.runFolder?.dirPath) {
+      const finishedAt = meta.finishedAt || new Date().toISOString();
+      const record = buildProjectSyncRecord(summary, { ...meta, finishedAt });
+      return {
+        record,
+        runFolder: meta.runFolder || null,
+        filePath: null,
+        relativePath: null,
+      };
     }
 
     const finishedAt = meta.finishedAt || new Date().toISOString();
@@ -267,8 +287,15 @@ function buildScheduledRunRecord(runMeta = {}, projectEntries = []) {
 
 function saveScheduledRunHistory(runMeta = {}, projectEntries = []) {
   try {
-    if (!runMeta.runFolder?.dirPath) {
-      throw new Error('runFolder is required to save scheduled sync run history');
+    if (isServerless() || !runMeta.runFolder?.dirPath) {
+      const finishedAt = runMeta.finishedAt || new Date().toISOString();
+      const record = buildScheduledRunRecord({ ...runMeta, finishedAt }, projectEntries);
+      return {
+        record,
+        runFolder: runMeta.runFolder || null,
+        filePath: null,
+        relativePath: null,
+      };
     }
 
     const finishedAt = runMeta.finishedAt || new Date().toISOString();

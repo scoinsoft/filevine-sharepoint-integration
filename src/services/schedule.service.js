@@ -3,11 +3,15 @@ const path = require('path');
 const cron = require('node-cron');
 const syncProjectService = require('./syncProject.service');
 const syncHistoryService = require('./syncHistory.service');
+const persistentJson = require('./persistentJson.service');
+const { isServerless, shouldStopForDeadline } = require('../config/runtime');
+const { dataDir, ensureDir } = require('../config/paths');
 const { log, logError } = require('../utils/logger');
 
-const SCHEDULE_DIR = path.join(process.cwd(), 'data');
-const SCHEDULE_FILE = path.join(SCHEDULE_DIR, 'schedule.json');
+const SCHEDULE_FILE = path.join(dataDir(), 'schedule.json');
+const SCHEDULE_RELATIVE = 'data/schedule.json';
 const RUN_WINDOW_MS = 3 * 60 * 60 * 1000;
+const STALE_RUN_MS = 12 * 60 * 1000;
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -105,22 +109,31 @@ function resolveTimezone(inputTimezone) {
   if (candidate && isValidTimezone(candidate)) {
     return candidate;
   }
-  return systemTimezone;
+  return systemTimezone.value;
 }
 
 /** @type {import('node-cron').ScheduledTask | null} */
 let cronTask = null;
 
-/** @type {{ active: boolean, startedAt: string | null, estimatedEndAt: string | null, currentProjectName: string | null }} */
-let runState = {
-  active: false,
-  startedAt: null,
-  estimatedEndAt: null,
-  currentProjectName: null,
-};
+/** @type {{ active: boolean, startedAt: string | null, estimatedEndAt: string | null, currentProjectName: string | null, heartbeatAt: string | null, runId: string | null, nextIndex: number, lastCompletedRunAt: string | null }} */
+let runState = emptyRunState();
 
 /** @type {{ enabled: boolean, frequency: string, time: string, dayOfWeek: number, timezone: string }} */
 let schedule = getDefaultSchedule();
+let ready = !isServerless();
+
+function emptyRunState() {
+  return {
+    active: false,
+    startedAt: null,
+    estimatedEndAt: null,
+    currentProjectName: null,
+    heartbeatAt: null,
+    runId: null,
+    nextIndex: 0,
+    lastCompletedRunAt: null,
+  };
+}
 
 function getDefaultSchedule() {
   return {
@@ -130,12 +143,6 @@ function getDefaultSchedule() {
     dayOfWeek: 1,
     timezone: getSystemTimezone(),
   };
-}
-
-function ensureDir() {
-  if (!fs.existsSync(SCHEDULE_DIR)) {
-    fs.mkdirSync(SCHEDULE_DIR, { recursive: true });
-  }
 }
 
 function normalizeSchedule(input = {}) {
@@ -164,8 +171,25 @@ function normalizeSchedule(input = {}) {
   return next;
 }
 
-function load() {
-  ensureDir();
+function applyPersisted(parsed) {
+  schedule = normalizeSchedule(parsed);
+  const persistedRun = parsed?.run && typeof parsed.run === 'object' ? parsed.run : {};
+  runState = {
+    ...emptyRunState(),
+    ...persistedRun,
+    lastCompletedRunAt: persistedRun.lastCompletedRunAt || parsed?.lastCompletedRunAt || null,
+  };
+}
+
+function persistPayload() {
+  return {
+    ...schedule,
+    run: runState,
+    lastCompletedRunAt: runState.lastCompletedRunAt,
+  };
+}
+
+function loadFromDisk() {
   if (!fs.existsSync(SCHEDULE_FILE)) {
     schedule = getDefaultSchedule();
     return;
@@ -173,17 +197,41 @@ function load() {
 
   try {
     const parsed = JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf8'));
-    schedule = normalizeSchedule(parsed);
+    applyPersisted(parsed);
   } catch {
     schedule = getDefaultSchedule();
   }
 }
 
-function save(nextSchedule) {
+async function persist() {
+  const payload = persistPayload();
+  if (isServerless()) {
+    await persistentJson.write(SCHEDULE_RELATIVE, payload);
+    return;
+  }
+  ensureDir(dataDir());
+  fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+}
+
+async function ensureReady() {
+  if (ready) {
+    return;
+  }
+  const remote = await persistentJson.read(SCHEDULE_RELATIVE);
+  if (remote) {
+    applyPersisted(remote);
+  } else {
+    schedule = getDefaultSchedule();
+  }
+  ready = true;
+}
+
+async function save(nextSchedule) {
   schedule = normalizeSchedule(nextSchedule);
-  ensureDir();
-  fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(schedule, null, 2), 'utf8');
-  restartCron();
+  await persist();
+  if (!isServerless()) {
+    restartCron();
+  }
   return getPublicSchedule();
 }
 
@@ -207,17 +255,27 @@ function formatScheduleSummary(currentSchedule) {
   return `Daily at ${timeLabel}`;
 }
 
+function isRunStale() {
+  if (!runState.active) return false;
+  const heartbeat = runState.heartbeatAt || runState.startedAt;
+  if (!heartbeat) return true;
+  return Date.now() - new Date(heartbeat).getTime() > STALE_RUN_MS;
+}
+
 function isUploadBlocked() {
-  return runState.active;
+  if (!runState.active) return false;
+  if (isRunStale()) return false;
+  return true;
 }
 
 function getRunStatus() {
+  const active = isUploadBlocked();
   return {
-    active: runState.active,
-    startedAt: runState.startedAt,
-    estimatedEndAt: runState.estimatedEndAt,
-    currentProjectName: runState.currentProjectName,
-    uploadsBlocked: runState.active,
+    active,
+    startedAt: active ? runState.startedAt : null,
+    estimatedEndAt: active ? runState.estimatedEndAt : null,
+    currentProjectName: active ? runState.currentProjectName : null,
+    uploadsBlocked: active,
   };
 }
 
@@ -236,36 +294,123 @@ function getPublicSchedule() {
   };
 }
 
-async function runScheduledSync() {
-  if (runState.active) {
-    log('Scheduled sync skipped because a run is already active');
-    return;
+function getZonedParts(date, timezone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value;
+  const weekday = get('weekday');
+  const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+    dayOfWeek: dayMap[weekday] ?? 0,
+    dateKey: `${get('year')}-${get('month')}-${get('day')}`,
+  };
+}
+
+function shouldStartScheduledRun(now = new Date()) {
+  if (!schedule.enabled) return false;
+  const parts = getZonedParts(now, schedule.timezone || 'UTC');
+  if (runState.lastCompletedRunAt) {
+    const last = getZonedParts(new Date(runState.lastCompletedRunAt), schedule.timezone || 'UTC');
+    if (last.dateKey === parts.dateKey) {
+      return false;
+    }
   }
 
-  const runStartedAt = new Date().toISOString();
-  const scheduledRunId = runStartedAt;
+  if (schedule.frequency === 'weekly' && parts.dayOfWeek !== schedule.dayOfWeek) {
+    return false;
+  }
+
+  // Vercel cron invokes this endpoint; run once per local schedule-day when enabled.
+  if (isServerless()) {
+    return true;
+  }
+
+  const [hour, minute] = schedule.time.split(':');
+  if (parts.hour !== hour) return false;
+  const scheduledMinute = Number(minute);
+  const currentMinute = Number(parts.minute);
+  if (Number.isNaN(scheduledMinute) || currentMinute < scheduledMinute || currentMinute > scheduledMinute + 9) {
+    return false;
+  }
+  return true;
+}
+
+async function runScheduledSync(options = {}) {
+  await ensureReady();
+
+  const continueRun = Boolean(options.continueRun);
+  const force = Boolean(options.force);
+
+  if (runState.active && !isRunStale() && !continueRun) {
+    log('Scheduled sync skipped because a run is already active');
+    return { skipped: true, reason: 'already-active', incomplete: false };
+  }
+
+  const resumeExisting = Boolean(runState.active && runState.runId && (continueRun || isRunStale()));
+  const startNew = force || shouldStartScheduledRun();
+
+  if (!resumeExisting && !startNew) {
+    return { skipped: true, reason: 'not-due', incomplete: false };
+  }
+
+  const runStartedAt = resumeExisting ? runState.startedAt : new Date().toISOString();
+  const scheduledRunId = resumeExisting ? runState.runId : runStartedAt;
+  const startIndex = resumeExisting ? Number(runState.nextIndex) || 0 : 0;
   const runFolder = syncHistoryService.createSyncRunFolder(runStartedAt, 'scheduled');
 
   runState.active = true;
   runState.startedAt = runStartedAt;
   runState.estimatedEndAt = new Date(Date.now() + RUN_WINDOW_MS).toISOString();
   runState.currentProjectName = null;
+  runState.heartbeatAt = new Date().toISOString();
+  runState.runId = scheduledRunId;
+  runState.nextIndex = startIndex;
+  await persist();
 
   log('Scheduled sync started', {
     startedAt: runState.startedAt,
     estimatedEndAt: runState.estimatedEndAt,
     scheduledRunId,
+    startIndex,
     runFolder: runFolder.relativeDir,
   });
 
   const projectEntries = [];
+  let incomplete = false;
 
   try {
     const projects = await syncProjectService.listAllProjects();
-    log(`Scheduled sync processing ${projects.length} project(s)`);
+    log(`Scheduled sync processing ${projects.length} project(s) from index ${startIndex}`);
 
-    for (const project of projects) {
+    for (let index = startIndex; index < projects.length; index += 1) {
+      if (shouldStopForDeadline()) {
+        runState.nextIndex = index;
+        runState.heartbeatAt = new Date().toISOString();
+        incomplete = true;
+        await persist();
+        log('Scheduled sync pausing for function time budget', { nextIndex: index });
+        break;
+      }
+
+      const project = projects[index];
       runState.currentProjectName = project.projectName;
+      runState.nextIndex = index;
+      runState.heartbeatAt = new Date().toISOString();
+      await persist();
 
       try {
         const summary = await syncProjectService.syncProject(project.projectId, project.projectName, {
@@ -280,11 +425,21 @@ async function runScheduledSync() {
           record: {
             success: summary.success,
             skippedArchivedProject: Boolean(summary.skippedArchivedProject),
+            incomplete: Boolean(summary.incomplete),
             error: summary.error || null,
             counts: summary.counts,
           },
           historyFile: summary.historyFile || null,
         });
+
+        if (summary.incomplete) {
+          runState.nextIndex = index;
+          incomplete = true;
+          await persist();
+          break;
+        }
+
+        runState.nextIndex = index + 1;
       } catch (error) {
         logError(`Scheduled sync failed for project ${project.projectId}`, error);
         const failedSummary = error.syncSummary || null;
@@ -301,22 +456,38 @@ async function runScheduledSync() {
             : null,
           historyFile: error.historyFile || failedSummary?.historyFile || null,
         });
+        runState.nextIndex = index + 1;
       }
     }
 
-    const runFinishedAt = new Date().toISOString();
-    syncHistoryService.saveScheduledRunHistory(
-      {
-        runId: scheduledRunId,
-        runFolder,
-        startedAt: runStartedAt,
-        finishedAt: runFinishedAt,
-        durationMs: Math.max(0, new Date(runFinishedAt).getTime() - new Date(runStartedAt).getTime()),
-      },
-      projectEntries
-    );
+    if (!incomplete && runState.nextIndex >= projects.length) {
+      const runFinishedAt = new Date().toISOString();
+      syncHistoryService.saveScheduledRunHistory(
+        {
+          runId: scheduledRunId,
+          runFolder,
+          startedAt: runStartedAt,
+          finishedAt: runFinishedAt,
+          durationMs: Math.max(0, new Date(runFinishedAt).getTime() - new Date(runStartedAt).getTime()),
+        },
+        projectEntries
+      );
 
-    log('Scheduled sync completed', { projects: projects.length });
+      runState = {
+        ...emptyRunState(),
+        lastCompletedRunAt: runFinishedAt,
+      };
+      await persist();
+      log('Scheduled sync completed', { projects: projects.length });
+      return { skipped: false, incomplete: false, processed: projectEntries.length };
+    }
+
+    return {
+      skipped: false,
+      incomplete: true,
+      nextIndex: runState.nextIndex,
+      processed: projectEntries.length,
+    };
   } catch (error) {
     logError('Scheduled sync failed', error);
 
@@ -331,10 +502,10 @@ async function runScheduledSync() {
       },
       projectEntries
     );
-  } finally {
     runState.active = false;
     runState.currentProjectName = null;
-    runState.estimatedEndAt = null;
+    await persist();
+    throw error;
   }
 }
 
@@ -347,7 +518,7 @@ function stopCron() {
 
 function restartCron() {
   stopCron();
-  if (!schedule.enabled) return;
+  if (isServerless() || !schedule.enabled) return;
 
   const expression = buildCronExpression(schedule);
   if (!cron.validate(expression)) {
@@ -356,7 +527,7 @@ function restartCron() {
   }
 
   cronTask = cron.schedule(expression, () => {
-    runScheduledSync().catch((error) => logError('Scheduled sync task failed', error));
+    runScheduledSync({ force: true }).catch((error) => logError('Scheduled sync task failed', error));
   }, {
     timezone: schedule.timezone,
   });
@@ -369,7 +540,10 @@ function restartCron() {
 }
 
 function init() {
-  load();
+  if (isServerless()) {
+    return;
+  }
+  loadFromDisk();
   restartCron();
 }
 
@@ -385,4 +559,6 @@ module.exports = {
   save,
   runScheduledSync,
   restartCron,
+  ensureReady,
+  shouldStartScheduledRun,
 };

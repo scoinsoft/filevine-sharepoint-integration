@@ -3,11 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
 const { filevine } = require('../config/env');
+const { isServerless } = require('../config/runtime');
+const { downloadsDir, uploadHistoryDir, failedHistoryDir, ensureDir } = require('../config/paths');
 const { log, logError } = require('../utils/logger');
 const { inspectDocumentResponse, logInspectionReport } = require('../utils/documentInspector');
 const projectUploadHistoryService = require('./projectUploadHistory.service');
+const persistentJson = require('./persistentJson.service');
 
-const DOWNLOAD_LINK_RESPONSE_FILE = path.join(process.cwd(), 'downloads', 'download-link-response.json');
+const DOWNLOAD_LINK_RESPONSE_FILE = path.join(downloadsDir(), 'download-link-response.json');
 
 let cachedToken = null;
 
@@ -47,17 +50,31 @@ function getProjectFolderLabel(projectId, projectName) {
 }
 
 function ensureDownloadsDir(projectId, projectName) {
-  const parts = [process.cwd(), 'downloads'];
+  const parts = [downloadsDir()];
   const folderLabel = getProjectFolderLabel(projectId, projectName);
   if (folderLabel) {
     parts.push(folderLabel);
   }
 
-  const downloadsDir = path.join(...parts);
-  if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir, { recursive: true });
+  const targetDir = path.join(...parts);
+  ensureDir(targetDir);
+  return targetDir;
+}
+
+function getUploadHistoryRelative(projectId, projectName) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for upload history path');
   }
-  return downloadsDir;
+  return `upload_history/${folderLabel}/uploaded-success.json`;
+}
+
+function getFailedHistoryRelative(projectId, projectName) {
+  const folderLabel = getProjectFolderLabel(projectId, projectName);
+  if (!folderLabel) {
+    throw new Error('projectId is required for failed history path');
+  }
+  return `failed_history/${folderLabel}/failed-history.json`;
 }
 
 function ensureUploadHistoryDir(projectId, projectName) {
@@ -66,10 +83,8 @@ function ensureUploadHistoryDir(projectId, projectName) {
     throw new Error('projectId is required for upload history path');
   }
 
-  const historyDir = path.join(process.cwd(), 'upload_history', folderLabel);
-  if (!fs.existsSync(historyDir)) {
-    fs.mkdirSync(historyDir, { recursive: true });
-  }
+  const historyDir = path.join(uploadHistoryDir(), folderLabel);
+  ensureDir(historyDir);
   return historyDir;
 }
 
@@ -79,10 +94,8 @@ function ensureFailedHistoryDir(projectId, projectName) {
     throw new Error('projectId is required for failed history path');
   }
 
-  const historyDir = path.join(process.cwd(), 'failed_history', folderLabel);
-  if (!fs.existsSync(historyDir)) {
-    fs.mkdirSync(historyDir, { recursive: true });
-  }
+  const historyDir = path.join(failedHistoryDir(), folderLabel);
+  ensureDir(historyDir);
   return historyDir;
 }
 
@@ -334,15 +347,17 @@ async function getDownloadLink(accessToken, documentId) {
 
     log('Batch download link response', response.data);
 
-    try {
-      ensureDownloadsDir();
-      fs.writeFileSync(DOWNLOAD_LINK_RESPONSE_FILE, JSON.stringify(response.data, null, 2), 'utf8');
-      log(`Saved batch download response to ${DOWNLOAD_LINK_RESPONSE_FILE}`);
-    } catch (error) {
-      if (error.code === 'ENOSPC') {
-        logError('Skipped saving batch download debug file (disk full)', error);
-      } else {
-        throw error;
+    if (!isServerless()) {
+      try {
+        ensureDownloadsDir();
+        fs.writeFileSync(DOWNLOAD_LINK_RESPONSE_FILE, JSON.stringify(response.data, null, 2), 'utf8');
+        log(`Saved batch download response to ${DOWNLOAD_LINK_RESPONSE_FILE}`);
+      } catch (error) {
+        if (error.code === 'ENOSPC') {
+          logError('Skipped saving batch download debug file (disk full)', error);
+        } else {
+          throw error;
+        }
       }
     }
 
@@ -397,46 +412,60 @@ function getProjectUploadManifestPath(projectId, projectName, { create = false }
   if (!folderLabel) {
     throw new Error('projectId is required for upload history path');
   }
-  const historyDir = path.join(process.cwd(), 'upload_history', folderLabel);
-  if (create && !fs.existsSync(historyDir)) {
-    fs.mkdirSync(historyDir, { recursive: true });
+  const historyDir = path.join(uploadHistoryDir(), folderLabel);
+  if (create) {
+    ensureDir(historyDir);
   }
   return path.join(historyDir, 'uploaded-success.json');
 }
 
-function readProjectUploadManifest(projectId, projectName) {
-  const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: false });
-  if (fs.existsSync(manifestPath)) {
-    // no-op: already present
-  } else {
-    migrateLegacyUploadManifest(projectId, projectName, manifestPath);
-  }
+function emptyManifest(manifestPath) {
+  return {
+    manifestPath,
+    uploadedDocumentIds: new Set(),
+    uploadedFilenames: new Set(),
+  };
+}
 
-  if (!fs.existsSync(manifestPath)) {
-    return {
-      manifestPath,
-      uploadedDocumentIds: new Set(),
-      uploadedFilenames: new Set(),
-    };
+function parseManifestPayload(parsed, manifestPath) {
+  const ids = Array.isArray(parsed?.uploadedDocumentIds) ? parsed.uploadedDocumentIds : [];
+  const names = Array.isArray(parsed?.uploadedFilenames) ? parsed.uploadedFilenames : [];
+  return {
+    manifestPath,
+    uploadedDocumentIds: new Set(ids.map((id) => String(id))),
+    uploadedFilenames: new Set(names.map((name) => String(name))),
+  };
+}
+
+async function readProjectUploadManifest(projectId, projectName) {
+  const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: false });
+  const relativePath = getUploadHistoryRelative(projectId, projectName);
+
+  if (!isServerless()) {
+    if (!fs.existsSync(manifestPath)) {
+      migrateLegacyUploadManifest(projectId, projectName, manifestPath);
+    }
+    if (!fs.existsSync(manifestPath)) {
+      return emptyManifest(manifestPath);
+    }
+    try {
+      const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      return parseManifestPayload(parsed, manifestPath);
+    } catch (error) {
+      logError('Failed to read upload manifest (starting fresh)', error);
+      return emptyManifest(manifestPath);
+    }
   }
 
   try {
-    const raw = fs.readFileSync(manifestPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const ids = Array.isArray(parsed?.uploadedDocumentIds) ? parsed.uploadedDocumentIds : [];
-    const names = Array.isArray(parsed?.uploadedFilenames) ? parsed.uploadedFilenames : [];
-    return {
-      manifestPath,
-      uploadedDocumentIds: new Set(ids.map((id) => String(id))),
-      uploadedFilenames: new Set(names.map((name) => String(name))),
-    };
+    const parsed = await persistentJson.read(relativePath);
+    if (!parsed) {
+      return emptyManifest(manifestPath);
+    }
+    return parseManifestPayload(parsed, manifestPath);
   } catch (error) {
     logError('Failed to read upload manifest (starting fresh)', error);
-    return {
-      manifestPath,
-      uploadedDocumentIds: new Set(),
-      uploadedFilenames: new Set(),
-    };
+    return emptyManifest(manifestPath);
   }
 }
 
@@ -448,16 +477,49 @@ function getFailedHistoryPath(projectId, projectName, { create = false } = {}) {
   if (!folderLabel) {
     throw new Error('projectId is required for failed history path');
   }
-  const historyDir = path.join(process.cwd(), 'failed_history', folderLabel);
-  if (create && !fs.existsSync(historyDir)) {
-    fs.mkdirSync(historyDir, { recursive: true });
+  const historyDir = path.join(failedHistoryDir(), folderLabel);
+  if (create) {
+    ensureDir(historyDir);
   }
   return path.join(historyDir, 'failed-history.json');
 }
 
-function readFailedUploadHistory(projectId, projectName) {
-  // Do not create folders just by reading — only when recording a real failure.
+function failedMapFromPayload(parsed) {
+  const entries = Array.isArray(parsed?.failed) ? parsed.failed : [];
+  const failedByDocumentId = new Map();
+  for (const entry of entries) {
+    const key = String(entry?.documentId ?? '');
+    if (!key) continue;
+    failedByDocumentId.set(key, {
+      documentId: key,
+      filename: entry.filename || null,
+      folderName: entry.folderName || null,
+      error: entry.error || 'Unknown error',
+      errorCode: entry.errorCode || null,
+      firstFailedAt: entry.firstFailedAt || new Date().toISOString(),
+      lastFailedAt: entry.lastFailedAt || new Date().toISOString(),
+    });
+  }
+  return failedByDocumentId;
+}
+
+async function readFailedUploadHistory(projectId, projectName) {
   const historyPath = getFailedHistoryPath(projectId, projectName, { create: false });
+  const relativePath = getFailedHistoryRelative(projectId, projectName);
+
+  if (isServerless()) {
+    try {
+      const parsed = await persistentJson.read(relativePath);
+      return {
+        historyPath,
+        failedByDocumentId: parsed ? failedMapFromPayload(parsed) : new Map(),
+      };
+    } catch (error) {
+      logError('Failed to read failed history (starting fresh)', error);
+      return { historyPath, failedByDocumentId: new Map() };
+    }
+  }
+
   if (!fs.existsSync(historyPath)) {
     return {
       historyPath,
@@ -466,24 +528,8 @@ function readFailedUploadHistory(projectId, projectName) {
   }
 
   try {
-    const raw = fs.readFileSync(historyPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const entries = Array.isArray(parsed?.failed) ? parsed.failed : [];
-    const failedByDocumentId = new Map();
-    for (const entry of entries) {
-      const key = String(entry?.documentId ?? '');
-      if (!key) continue;
-      failedByDocumentId.set(key, {
-        documentId: key,
-        filename: entry.filename || null,
-        folderName: entry.folderName || null,
-        error: entry.error || 'Unknown error',
-        errorCode: entry.errorCode || null,
-        firstFailedAt: entry.firstFailedAt || new Date().toISOString(),
-        lastFailedAt: entry.lastFailedAt || new Date().toISOString(),
-      });
-    }
-    return { historyPath, failedByDocumentId };
+    const parsed = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+    return { historyPath, failedByDocumentId: failedMapFromPayload(parsed) };
   } catch (error) {
     logError('Failed to read failed history (starting fresh)', error);
     return {
@@ -516,7 +562,7 @@ function queueFailedHistoryWrite(projectId, projectName, writer) {
   return next;
 }
 
-function removeFailedHistoryIfEmpty(projectId, projectName) {
+async function removeFailedHistoryIfEmpty(projectId, projectName) {
   const historyPath = getFailedHistoryPath(projectId, projectName, { create: false });
   const historyDir = path.dirname(historyPath);
   try {
@@ -532,11 +578,15 @@ function removeFailedHistoryIfEmpty(projectId, projectName) {
   } catch (error) {
     logError('Failed to clean empty failed history folder', error);
   }
+
+  if (isServerless()) {
+    await persistentJson.remove(getFailedHistoryRelative(projectId, projectName));
+  }
 }
 
-function writeFailedHistoryFile(projectId, projectName, failedByDocumentId) {
+async function writeFailedHistoryFile(projectId, projectName, failedByDocumentId) {
   if (!failedByDocumentId || failedByDocumentId.size === 0) {
-    removeFailedHistoryIfEmpty(projectId, projectName);
+    await removeFailedHistoryIfEmpty(projectId, projectName);
     return null;
   }
 
@@ -549,7 +599,12 @@ function writeFailedHistoryFile(projectId, projectName, failedByDocumentId) {
       String(a.documentId).localeCompare(String(b.documentId))
     ),
   };
-  fs.writeFileSync(historyPath, JSON.stringify(payload, null, 2), 'utf8');
+
+  if (isServerless()) {
+    await persistentJson.write(getFailedHistoryRelative(projectId, projectName), payload);
+  } else {
+    fs.writeFileSync(historyPath, JSON.stringify(payload, null, 2), 'utf8');
+  }
   return historyPath;
 }
 
@@ -625,8 +680,7 @@ function recordProjectUploadSuccess(
   uploadedFilenames
 ) {
   manifestWriteChain = manifestWriteChain
-    .then(() => {
-      // Only create the upload_history folder when we actually have a successful upload.
+    .then(async () => {
       const manifestPath = getProjectUploadManifestPath(projectId, projectName, { create: true });
       const documentKey = String(documentId);
       const fileKey = String(filename || '');
@@ -644,9 +698,13 @@ function recordProjectUploadSuccess(
         uploadedFilenames: [...uploadedFilenames],
       };
 
-      fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
+      if (isServerless()) {
+        await persistentJson.write(getUploadHistoryRelative(projectId, projectName), payload);
+      } else {
+        fs.writeFileSync(manifestPath, JSON.stringify(payload, null, 2), 'utf8');
+      }
       try {
-        projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
+        await projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
           uploadedCount: uploadedDocumentIds.size,
           folderLabel: getProjectFolderLabel(projectId, projectName),
         });

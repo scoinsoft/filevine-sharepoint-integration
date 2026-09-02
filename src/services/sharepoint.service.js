@@ -75,15 +75,21 @@ async function withUploadPathLock(sharePointPath, operation) {
 }
 
 function getUploadTimeoutMs() {
+  const { isServerless, remainingMs } = require('../config/runtime');
   const ms = Number(
     process.env.SHAREPOINT_TIMEOUT_MS ||
       process.env.POWER_AUTOMATE_TIMEOUT_MS ||
       DEFAULT_TIMEOUT_MS
   );
-  if (!Number.isFinite(ms) || ms <= 0) {
-    return DEFAULT_TIMEOUT_MS;
+  const configured = Number.isFinite(ms) && ms > 0 ? Math.floor(ms) : DEFAULT_TIMEOUT_MS;
+  if (!isServerless()) {
+    return configured;
   }
-  return Math.floor(ms);
+  const remaining = remainingMs();
+  if (!Number.isFinite(remaining)) {
+    return Math.min(configured, 120000);
+  }
+  return Math.max(5000, Math.min(configured, remaining - 5000));
 }
 
 function formatMegabytes(bytes) {
@@ -675,6 +681,143 @@ async function deleteFolderByPath(relativeFolderPath) {
   });
 }
 
+const STATE_FOLDER_NAME = '_sync-state';
+
+function getStateRootFolder() {
+  return `${getRootFolder()}/${STATE_FOLDER_NAME}`;
+}
+
+function buildStateItemPath(relativePath) {
+  const normalized = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '');
+  return `${getStateRootFolder()}/${normalized}`;
+}
+
+async function graphGet(accessToken, url, options = {}) {
+  return axios.get(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+    timeout: getUploadTimeoutMs(),
+    validateStatus: options.validateStatus,
+    responseType: options.responseType || 'json',
+    transformResponse: options.transformResponse,
+  });
+}
+
+async function listFolderChildren(relativeFolderPath) {
+  const folderPath = String(relativeFolderPath || '').replace(/^\/+/, '');
+  if (!folderPath) {
+    return [];
+  }
+
+  return withAccessToken(async (accessToken) => {
+    const children = [];
+    let url = `${buildItemByPathUrl(folderPath)}:/children?$select=name,folder,file,lastModifiedDateTime,size&$top=200`;
+
+    try {
+      while (url) {
+        const response = await graphGet(accessToken, url, {
+          validateStatus: (status) => status >= 200 && status < 300,
+        });
+        const items = Array.isArray(response.data?.value) ? response.data.value : [];
+        children.push(...items);
+        url = response.data?.['@odata.nextLink'] || null;
+      }
+      return children;
+    } catch (error) {
+      if (isItemNotFoundError(error)) {
+        return [];
+      }
+      throw formatGraphError(error, 'list');
+    }
+  });
+}
+
+async function listFolderFileNames(relativeFolderPath) {
+  const children = await listFolderChildren(relativeFolderPath);
+  return children.filter((item) => item?.file).map((item) => String(item.name || '')).filter(Boolean);
+}
+
+let cachedRootFolderNames = null;
+let cachedRootFolderNamesAt = 0;
+const ROOT_FOLDER_CACHE_MS = 60 * 1000;
+
+async function getRootProjectFolderNameSet({ forceRefresh = false } = {}) {
+  if (
+    !forceRefresh &&
+    cachedRootFolderNames &&
+    Date.now() - cachedRootFolderNamesAt < ROOT_FOLDER_CACHE_MS
+  ) {
+    return cachedRootFolderNames;
+  }
+
+  const children = await listFolderChildren(getRootFolder());
+  const names = new Set();
+  for (const item of children) {
+    if (!item?.folder) continue;
+    const name = String(item.name || '').trim();
+    if (!name || name.startsWith('_') || name.startsWith('.')) continue;
+    names.add(name.toLowerCase());
+  }
+  cachedRootFolderNames = names;
+  cachedRootFolderNamesAt = Date.now();
+  return names;
+}
+
+function invalidateRootProjectFolderCache() {
+  cachedRootFolderNames = null;
+  cachedRootFolderNamesAt = 0;
+}
+
+async function readStateJson(relativePath) {
+  const itemPath = buildStateItemPath(relativePath);
+  return withAccessToken(async (accessToken) => {
+    try {
+      const response = await axios.get(buildItemContentUrl(itemPath), {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        timeout: getUploadTimeoutMs(),
+        responseType: 'text',
+        transformResponse: [(data) => data],
+        validateStatus: (status) => status >= 200 && status < 300,
+      });
+      const parsed = JSON.parse(response.data || 'null');
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+      if (isItemNotFoundError(error)) {
+        return null;
+      }
+      throw formatGraphError(error, 'read');
+    }
+  });
+}
+
+async function writeStateJson(relativePath, data) {
+  const itemPath = buildStateItemPath(relativePath);
+  const body = Buffer.from(JSON.stringify(data, null, 2), 'utf8');
+  return withAccessToken(async (accessToken) => {
+    await axios.put(buildItemContentUrl(itemPath), body, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: getUploadTimeoutMs(),
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+      validateStatus: (status) => status >= 200 && status < 300,
+    });
+    return itemPath;
+  });
+}
+
+async function deleteStateJson(relativePath) {
+  return deleteFolderByPath(buildStateItemPath(relativePath));
+}
+
 module.exports = {
   uploadToSharePoint,
   uploadFile,
@@ -689,4 +832,12 @@ module.exports = {
   isNameAlreadyExistsError,
   isResourceModifiedError,
   isSharePointConflictSkipError,
+  listFolderChildren,
+  listFolderFileNames,
+  getRootProjectFolderNameSet,
+  invalidateRootProjectFolderCache,
+  readStateJson,
+  writeStateJson,
+  deleteStateJson,
+  getStateRootFolder,
 };

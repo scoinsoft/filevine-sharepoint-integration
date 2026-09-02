@@ -4,6 +4,7 @@ const sharepointService = require('./sharepoint.service');
 const syncHistoryService = require('./syncHistory.service');
 const projectUploadHistoryService = require('./projectUploadHistory.service');
 const { validateSharePointEnv } = require('../config/env');
+const { isServerless, shouldStopForDeadline } = require('../config/runtime');
 const { log, logError } = require('../utils/logger');
 
 function readPositiveIntEnv(name, fallback) {
@@ -18,7 +19,9 @@ function normalizeFilenameKey(filename) {
   return path.basename(String(filename || '')).trim().toLowerCase();
 }
 
-const SYNC_CONCURRENCY = readPositiveIntEnv('SYNC_CONCURRENCY', 6);
+const SYNC_CONCURRENCY = isServerless()
+  ? Math.min(readPositiveIntEnv('SYNC_CONCURRENCY', 2), 3)
+  : readPositiveIntEnv('SYNC_CONCURRENCY', 6);
 
 function isUnauthorizedError(error) {
   const status = error?.response?.status;
@@ -232,7 +235,7 @@ async function syncProject(projectId, projectName, options = {}) {
         results,
       };
       try {
-        projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
+        await projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
           uploadedCount: 0,
           folderLabel: filevineService.getProjectFolderLabel(projectId, projectName),
         });
@@ -248,9 +251,19 @@ async function syncProject(projectId, projectName, options = {}) {
       return { ...summary, historyFile: history?.relativePath || null };
     }
 
-    const manifest = filevineService.readProjectUploadManifest(projectId, projectName);
+    const manifest = await filevineService.readProjectUploadManifest(projectId, projectName);
     const uploadedDocumentIds = manifest.uploadedDocumentIds;
     const uploadedFilenames = manifest.uploadedFilenames;
+    try {
+      const existingSharePointNames = await sharepointService.listFolderFileNames(
+        sharepointService.buildProjectFolderPath(projectName)
+      );
+      for (const name of existingSharePointNames) {
+        if (name) uploadedFilenames.add(name);
+      }
+    } catch (error) {
+      logError('Failed to list existing SharePoint files for skip checks', error);
+    }
     const uploadedFilenameKeys = new Set(
       [...uploadedFilenames].map((name) => normalizeFilenameKey(name))
     );
@@ -275,11 +288,12 @@ async function syncProject(projectId, projectName, options = {}) {
         skipCount: skipDuplicateDocumentIds.size,
       });
     }
-    const failedHistory = filevineService.readFailedUploadHistory(projectId, projectName);
+    const failedHistory = await filevineService.readFailedUploadHistory(projectId, projectName);
     const failedByDocumentId = failedHistory.failedByDocumentId;
 
     let nextIndex = 0;
     let fatalSharePointError = null;
+    let stoppedForDeadline = false;
     const transferProgressThrottle = new Map();
 
     function emitTransferProgress(documentId, filename, progress) {
@@ -363,6 +377,11 @@ async function syncProject(projectId, projectName, options = {}) {
 
     async function processDocument(document) {
       if (fatalSharePointError) return;
+
+      if (shouldStopForDeadline()) {
+        stoppedForDeadline = true;
+        return;
+      }
 
       const item = {
         documentId: document.documentId,
@@ -645,7 +664,7 @@ async function syncProject(projectId, projectName, options = {}) {
     const workers = Array.from({ length: workerCount }, () =>
       (async () => {
         while (true) {
-          if (fatalSharePointError) return;
+          if (fatalSharePointError || stoppedForDeadline) return;
           const currentIndex = nextIndex;
           nextIndex += 1;
           if (currentIndex >= documents.length) break;
@@ -667,8 +686,11 @@ async function syncProject(projectId, projectName, options = {}) {
     }
 
     const counts = buildSyncSummaryCounts(results);
+    const processed = results.succeeded.length + results.failed.length;
+    const incomplete = Boolean(stoppedForDeadline && processed < total);
     const summary = {
       success: results.failed.length === 0,
+      incomplete,
       projectId,
       projectName,
       total,
@@ -679,8 +701,9 @@ async function syncProject(projectId, projectName, options = {}) {
         totalDocuments: total,
       },
       results,
-      message:
-        results.failed.length === 0
+      message: incomplete
+        ? `Paused after ${processed} of ${total} file(s) to stay within the host time limit`
+        : results.failed.length === 0
           ? `${counts.newlyUploaded} newly uploaded, ${counts.skippedAlreadyUploaded} skipped`
           : `Finished with ${counts.newlyUploaded} newly uploaded, ${counts.skippedAlreadyUploaded} skipped, ${counts.failed} failed`,
     };
@@ -688,7 +711,7 @@ async function syncProject(projectId, projectName, options = {}) {
     // Always mark the project as known after a completed sync attempt so refresh
     // does not keep showing it as "new" (even if some files failed).
     try {
-      projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
+      await projectUploadHistoryService.markProjectUploaded(projectId, projectName, {
         uploadedCount: uploadedDocumentIds.size,
         folderLabel: filevineService.getProjectFolderLabel(projectId, projectName),
       });

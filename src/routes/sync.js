@@ -5,6 +5,7 @@ const scheduleService = require('../services/schedule.service');
 const syncRunService = require('../services/syncRun.service');
 const projectUploadHistoryService = require('../services/projectUploadHistory.service');
 const removeArchivedSharePointFoldersService = require('../services/removeArchivedSharePointFolders.service');
+const sharepointService = require('../services/sharepoint.service');
 const { log, logError } = require('../utils/logger');
 
 const router = express.Router();
@@ -28,8 +29,9 @@ function createSseSender(res) {
 
 function initSse(res) {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 }
 
@@ -37,9 +39,9 @@ router.get('/projects/upload-history', async (req, res) => {
   try {
     const rebuild = String(req.query.rebuild || '') === '1';
     if (rebuild) {
-      projectUploadHistoryService.rebuildProjectUploadHistoryIndex();
+      await projectUploadHistoryService.rebuildProjectUploadHistoryIndex();
     }
-    const summary = projectUploadHistoryService.getProjectUploadHistorySummary();
+    const summary = await projectUploadHistoryService.getProjectUploadHistorySummary();
     res.json(summary);
   } catch (error) {
     logError('Failed to load project upload history', error);
@@ -56,7 +58,13 @@ router.get('/projects', async (req, res) => {
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 1000));
     const accessToken = await filevineService.authenticate();
     const page = await filevineService.listProjectsPage(accessToken, { offset, limit });
-    const uploadedIds = new Set(projectUploadHistoryService.getUploadedProjectIds());
+    const uploadedIds = new Set(await projectUploadHistoryService.getUploadedProjectIds());
+    let sharePointFolders = new Set();
+    try {
+      sharePointFolders = await sharepointService.getRootProjectFolderNameSet();
+    } catch (error) {
+      logError('Failed to list SharePoint project folders for upload badges', error);
+    }
 
     res.json({
       success: true,
@@ -66,16 +74,21 @@ router.get('/projects', async (req, res) => {
       loadedTo: page.offset + page.projects.length,
       hasMore: page.hasMore,
       uploadedProjectCount: uploadedIds.size,
-      projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate, isArchived }) => ({
-        projectId,
-        projectName,
-        projectNumber,
-        phaseName,
-        createdDate,
-        isArchived,
-        alreadyUploaded: uploadedIds.has(String(projectId)),
-        isNew: !uploadedIds.has(String(projectId)),
-      })),
+      projects: page.projects.map(({ projectId, projectName, projectNumber, phaseName, createdDate, isArchived }) => {
+        const folderName = sharepointService.sanitizeFolderName(projectName).toLowerCase();
+        const alreadyUploaded =
+          uploadedIds.has(String(projectId)) || sharePointFolders.has(folderName);
+        return {
+          projectId,
+          projectName,
+          projectNumber,
+          phaseName,
+          createdDate,
+          isArchived,
+          alreadyUploaded,
+          isNew: !alreadyUploaded,
+        };
+      }),
     });
   } catch (error) {
     logError('Failed to list projects', error);

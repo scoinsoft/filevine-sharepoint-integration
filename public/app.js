@@ -2494,42 +2494,101 @@
       success: false,
       fatalError: null,
     };
+    let receivedSyncEvents = false;
 
-    await readSseStream(response, (event, data) => {
-      if (event === 'status' && onStatus) onStatus(data);
-      if (event === 'started') {
-        summary.total = data.total || 0;
-        if (onStarted) onStarted(data);
+    try {
+      await readSseStream(response, (event, data) => {
+        receivedSyncEvents = true;
+        if (event === 'status' && onStatus) onStatus(data);
+        if (event === 'started') {
+          summary.total = data.total || 0;
+          if (onStarted) onStarted(data);
+        }
+        if (event === 'file-transfer-progress' && onFileTransferProgress) onFileTransferProgress(data);
+        if (event === 'file-upload-progress' && onFileTransferProgress) onFileTransferProgress(data);
+        if (event === 'file-success' && onFileSuccess) onFileSuccess(data);
+        if (event === 'file-error' && onFileError) onFileError(data);
+        if (event === 'complete') {
+          summary = {
+            succeeded: data.succeeded || 0,
+            failed: data.failed || 0,
+            total: data.total || 0,
+            success: Boolean(data.success),
+            incomplete: Boolean(data.incomplete),
+            skippedArchivedProject: Boolean(data.skippedArchivedProject),
+            projectId: data.projectId || null,
+            projectName: data.projectName || null,
+            projectNumber: data.projectNumber || null,
+            phaseName: data.phaseName || null,
+            message: data.message || null,
+            counts: data.counts || null,
+            fatalError: null,
+          };
+          if (onComplete) onComplete(data);
+        }
+        if (event === 'error') {
+          summary.fatalError = data.error || 'Sync failed';
+          if (onError) onError(data);
+        }
+      });
+    } catch (error) {
+      const chunkAttempt = Number(handlers._chunkAttempt || 0) + 1;
+      if (receivedSyncEvents && chunkAttempt <= 40) {
+        if (onStatus) {
+          onStatus({
+            stage: 'continuing',
+            message: 'Host disconnected before this project finished; continuing…',
+          });
+        }
+        return syncProjectToSharePoint(project, {
+          ...handlers,
+          _chunkAttempt: chunkAttempt,
+          onStarted: onStatus
+            ? (data) =>
+                onStatus({
+                  stage: 'continuing',
+                  message: `Continuing ${data.projectName || project.projectName}…`,
+                })
+            : undefined,
+          onComplete: (data) => {
+            if (data.incomplete) return;
+            if (onComplete) onComplete(data);
+          },
+        });
       }
-      if (event === 'file-transfer-progress' && onFileTransferProgress) onFileTransferProgress(data);
-      if (event === 'file-upload-progress' && onFileTransferProgress) onFileTransferProgress(data);
-      if (event === 'file-success' && onFileSuccess) onFileSuccess(data);
-      if (event === 'file-error' && onFileError) onFileError(data);
-      if (event === 'complete') {
-        summary = {
-          succeeded: data.succeeded || 0,
-          failed: data.failed || 0,
-          total: data.total || 0,
-          success: Boolean(data.success),
-          skippedArchivedProject: Boolean(data.skippedArchivedProject),
-          projectId: data.projectId || null,
-          projectName: data.projectName || null,
-          projectNumber: data.projectNumber || null,
-          phaseName: data.phaseName || null,
-          message: data.message || null,
-          counts: data.counts || null,
-          fatalError: null,
-        };
-        if (onComplete) onComplete(data);
-      }
-      if (event === 'error') {
-        summary.fatalError = data.error || 'Sync failed';
-        if (onError) onError(data);
-      }
-    });
+      throw error;
+    }
 
     if (summary.fatalError) {
       throw new Error(summary.fatalError);
+    }
+
+    if (summary.incomplete) {
+      const chunkAttempt = Number(handlers._chunkAttempt || 0) + 1;
+      if (chunkAttempt > 40) {
+        return summary;
+      }
+      if (onStatus) {
+        onStatus({
+          stage: 'continuing',
+          message: summary.message || 'Host time limit reached; continuing this project…',
+        });
+      }
+      return syncProjectToSharePoint(project, {
+        ...handlers,
+        _chunkAttempt: chunkAttempt,
+        onStarted: onStatus
+          ? (data) =>
+              onStatus({
+                stage: 'continuing',
+                message: `Continuing ${data.projectName || project.projectName}…`,
+              })
+          : undefined,
+        onComplete: (data) => {
+          if (data.incomplete) return;
+          if (onComplete) onComplete(data);
+        },
+      });
     }
 
     return summary;

@@ -17,9 +17,9 @@ router.get('/', (req, res) => {
   });
 });
 
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   try {
-    const schedule = scheduleService.save(req.body || {});
+    const schedule = await scheduleService.save(req.body || {});
     res.json({
       success: true,
       schedule,

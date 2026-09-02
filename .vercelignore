@@ -1,0 +1,9 @@
+upload_history
+downloads
+sync_history
+failed_history
+data
+.env
+.git
+*.md
+README*

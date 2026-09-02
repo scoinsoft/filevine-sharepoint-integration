@@ -1,9 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const { isServerless } = require('../config/runtime');
+const { uploadHistoryDir, ensureDir } = require('../config/paths');
+const persistentJson = require('./persistentJson.service');
 const { log, logError } = require('../utils/logger');
 
-const UPLOAD_HISTORY_DIR = path.join(process.cwd(), 'upload_history');
+const UPLOAD_HISTORY_DIR = uploadHistoryDir();
 const INDEX_FILE = path.join(UPLOAD_HISTORY_DIR, 'projects-index.json');
+const INDEX_RELATIVE = 'upload_history/projects-index.json';
 
 /** @type {{ version: number, updatedAt: string|null, projects: Record<string, object> } | null} */
 let cachedIndex = null;
@@ -14,13 +18,6 @@ function emptyIndex() {
     updatedAt: null,
     projects: {},
   };
-}
-
-function ensureUploadHistoryRoot() {
-  if (!fs.existsSync(UPLOAD_HISTORY_DIR)) {
-    fs.mkdirSync(UPLOAD_HISTORY_DIR, { recursive: true });
-  }
-  return UPLOAD_HISTORY_DIR;
 }
 
 function extractProjectIdFromFolderName(folderName) {
@@ -85,9 +82,11 @@ function buildProjectEntryFromManifest(manifest, folderLabel) {
 }
 
 function scanUploadHistoryFolders() {
-  ensureUploadHistoryRoot();
-  const projects = {};
+  if (isServerless() || !fs.existsSync(UPLOAD_HISTORY_DIR)) {
+    return {};
+  }
 
+  const projects = {};
   let entries = [];
   try {
     entries = fs.readdirSync(UPLOAD_HISTORY_DIR, { withFileTypes: true });
@@ -110,7 +109,6 @@ function scanUploadHistoryFolders() {
       }
     }
 
-    // Folder exists under upload_history → treat as already uploaded even without a manifest.
     const projectId = extractProjectIdFromFolderName(entry.name);
     if (!projectId) continue;
     const nameFromFolder = entry.name.replace(new RegExp(`_${projectId}$`), '') || entry.name;
@@ -133,14 +131,20 @@ function scanUploadHistoryFolders() {
   return projects;
 }
 
-function writeIndex(index) {
-  ensureUploadHistoryRoot();
+async function writeIndex(index) {
   const payload = {
     version: 1,
     updatedAt: new Date().toISOString(),
     projects: index.projects || {},
   };
-  fs.writeFileSync(INDEX_FILE, JSON.stringify(payload, null, 2), 'utf8');
+
+  if (isServerless()) {
+    await persistentJson.write(INDEX_RELATIVE, payload);
+  } else {
+    ensureDir(UPLOAD_HISTORY_DIR);
+    fs.writeFileSync(INDEX_FILE, JSON.stringify(payload, null, 2), 'utf8');
+  }
+
   cachedIndex = payload;
   return payload;
 }
@@ -183,8 +187,6 @@ function mergeScannedIntoIndex(index, scanned) {
 }
 
 function readIndexFromDisk() {
-  ensureUploadHistoryRoot();
-
   let index = emptyIndex();
   if (!fs.existsSync(INDEX_FILE)) {
     return index;
@@ -207,8 +209,18 @@ function readIndexFromDisk() {
   return index;
 }
 
-function loadIndex({ forceRescan = false } = {}) {
+async function loadIndex({ forceRescan = false } = {}) {
   if (cachedIndex && !forceRescan) {
+    return cachedIndex;
+  }
+
+  if (isServerless()) {
+    const stored = await persistentJson.read(INDEX_RELATIVE);
+    cachedIndex = stored && stored.projects ? {
+      version: 1,
+      updatedAt: stored.updatedAt || null,
+      projects: stored.projects,
+    } : emptyIndex();
     return cachedIndex;
   }
 
@@ -224,13 +236,13 @@ function loadIndex({ forceRescan = false } = {}) {
   return index;
 }
 
-function getUploadedProjectIds() {
-  const index = loadIndex();
+async function getUploadedProjectIds() {
+  const index = await loadIndex();
   return Object.keys(index.projects);
 }
 
-function getProjectUploadHistorySummary() {
-  const index = loadIndex();
+async function getProjectUploadHistorySummary() {
+  const index = await loadIndex();
   const uploadedProjectIds = Object.keys(index.projects);
   return {
     success: true,
@@ -241,21 +253,30 @@ function getProjectUploadHistorySummary() {
   };
 }
 
-function isProjectUploaded(projectId) {
+async function isProjectUploaded(projectId) {
   if (projectId == null) return false;
-  const index = loadIndex();
+  const index = await loadIndex();
   return Boolean(index.projects[String(projectId)]);
 }
 
-function markProjectUploaded(projectId, projectName, options = {}) {
+async function markProjectUploaded(projectId, projectName, options = {}) {
   if (projectId == null) {
     return null;
   }
 
   try {
-    // Always merge from disk so concurrent writers don't overwrite each other.
-    const index = readIndexFromDisk();
-    mergeScannedIntoIndex(index, scanUploadHistoryFolders());
+    let index;
+    if (isServerless()) {
+      const stored = await persistentJson.read(INDEX_RELATIVE);
+      index = stored && stored.projects ? {
+        version: 1,
+        updatedAt: stored.updatedAt || null,
+        projects: stored.projects,
+      } : emptyIndex();
+    } else {
+      index = readIndexFromDisk();
+      mergeScannedIntoIndex(index, scanUploadHistoryFolders());
+    }
 
     const key = String(projectId);
     const now = new Date().toISOString();
@@ -265,8 +286,6 @@ function markProjectUploaded(projectId, projectName, options = {}) {
         : Number(options.uploadedCount) || undefined;
 
     const resolvedCount = typeof uploadedCount === 'number' ? uploadedCount : 0;
-    // Index-only by default. Physical upload_history folders are created only when
-    // a real successful upload writes uploaded-success.json (or on failures under failed_history).
     const folderLabel = resolveFolderLabel(key, projectName, options.folderLabel || null);
 
     const existing = index.projects[key];
@@ -288,7 +307,7 @@ function markProjectUploaded(projectId, projectName, options = {}) {
       };
     }
 
-    writeIndex(index);
+    await writeIndex(index);
     log('Marked project in upload history index', {
       projectId: key,
       projectName: projectName || null,
@@ -302,9 +321,11 @@ function markProjectUploaded(projectId, projectName, options = {}) {
   }
 }
 
-function rebuildProjectUploadHistoryIndex() {
-  // Merge folders into the existing index — never wipe index-only entries.
+async function rebuildProjectUploadHistoryIndex() {
   cachedIndex = null;
+  if (isServerless()) {
+    return loadIndex({ forceRescan: true });
+  }
   const index = readIndexFromDisk();
   mergeScannedIntoIndex(index, scanUploadHistoryFolders());
   return writeIndex(index);
@@ -317,4 +338,5 @@ module.exports = {
   markProjectUploaded,
   loadIndex,
   rebuildProjectUploadHistoryIndex,
+  sanitizeFolderName,
 };

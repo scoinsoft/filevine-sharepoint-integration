@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const { isServerless } = require('../config/runtime');
+const { dataDir, ensureDir } = require('../config/paths');
+const persistentJson = require('./persistentJson.service');
 
-const SETTINGS_DIR = path.join(process.cwd(), 'data');
-const SETTINGS_FILE = path.join(SETTINGS_DIR, 'settings.json');
+const SETTINGS_FILE = path.join(dataDir(), 'settings.json');
+const SETTINGS_RELATIVE = 'data/settings.json';
 
 const EDITABLE_KEYS = [
   'FILEVINE_CLIENT_ID',
@@ -44,15 +47,14 @@ const API_FIELD_MAP = {
 
 /** @type {Record<string, string>} */
 let store = {};
+let ready = false;
+let readyPromise = null;
 
-function ensureDir() {
-  if (!fs.existsSync(SETTINGS_DIR)) {
-    fs.mkdirSync(SETTINGS_DIR, { recursive: true });
+function loadFromDisk() {
+  if (isServerless()) {
+    return;
   }
-}
 
-function load() {
-  ensureDir();
   if (!fs.existsSync(SETTINGS_FILE)) {
     store = {};
     return;
@@ -64,6 +66,31 @@ function load() {
   } catch {
     store = {};
   }
+}
+
+async function ensureReady() {
+  if (ready) {
+    return;
+  }
+  if (readyPromise) {
+    return readyPromise;
+  }
+
+  readyPromise = (async () => {
+    if (isServerless()) {
+      const remote = await persistentJson.read(SETTINGS_RELATIVE);
+      if (remote && typeof remote === 'object') {
+        store = remote;
+      }
+    } else {
+      loadFromDisk();
+    }
+    ready = true;
+  })().finally(() => {
+    readyPromise = null;
+  });
+
+  return readyPromise;
 }
 
 function get(key) {
@@ -102,7 +129,7 @@ function getPublicSettings() {
   };
 }
 
-function updateFromApiPayload(payload = {}) {
+async function updateFromApiPayload(payload = {}) {
   const nextStore = { ...store };
 
   for (const [apiField, envKey] of Object.entries(API_FIELD_MAP)) {
@@ -122,12 +149,21 @@ function updateFromApiPayload(payload = {}) {
   }
 
   store = nextStore;
-  ensureDir();
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(store, null, 2), 'utf8');
+
+  if (isServerless()) {
+    await persistentJson.write(SETTINGS_RELATIVE, store);
+  } else {
+    ensureDir(dataDir());
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(store, null, 2), 'utf8');
+  }
+
   return getPublicSettings();
 }
 
-load();
+if (!isServerless()) {
+  loadFromDisk();
+  ready = true;
+}
 
 module.exports = {
   EDITABLE_KEYS,
@@ -135,4 +171,5 @@ module.exports = {
   get,
   getPublicSettings,
   updateFromApiPayload,
+  ensureReady,
 };

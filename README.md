@@ -1,0 +1,204 @@
+# Filevine → SharePoint Sync
+
+Web app that lists Filevine projects, copies documents into SharePoint, and can run that sync on a schedule.
+
+It still runs locally with `npm start`. It is also set up to deploy on **Vercel**.
+
+## Why this had to change for Vercel
+
+The original app was a long-running Express server:
+
+- It called `app.listen()` and stayed up
+- Upload history lived in local folders (`upload_history/`, `failed_history/`, `sync_history/`)
+- Settings and schedule were saved as JSON files under `data/`
+- Login sessions lived in memory
+- `node-cron` ran scheduled syncs inside the process
+- A full org sync could take hours
+
+Vercel does not work that way:
+
+- Each request is a serverless function, not a 24/7 process
+- The filesystem is ephemeral (writes disappear; `/tmp` is temporary)
+- Functions time out (60s on Hobby, **300s on Pro**)
+- In-memory state is lost between invocations
+- In-process cron does not survive
+
+The updates below keep the same UI and sync behavior, but make it safe on that platform.
+
+## What changed
+
+### 1. Express is exported for Vercel
+
+- Local: `src/app.js` still listens on `PORT` when you run `npm start`
+- Vercel: `api/index.js` exports the same Express app
+- `vercel.json` rewrites every request to that function and serves `public/` from it
+
+### 2. Sync state is stored in SharePoint, not on disk
+
+On Vercel, JSON state is written to:
+
+`{SHAREPOINT_ROOT_FOLDER}/_sync-state/`
+
+That includes:
+
+- project upload index
+- per-project upload manifests
+- failed-upload history
+- settings overrides
+- schedule + current run cursor
+
+Locally, the app still uses the original folders on disk.
+
+During a project sync it also lists files already in the SharePoint project folder, so existing files are skipped even if local history was not deployed.
+
+### 3. Downloads use `/tmp` on Vercel
+
+Filevine files are downloaded to a temp directory, uploaded to SharePoint, then deleted. They are not stored in the git repo.
+
+### 4. Sessions are signed tokens
+
+Login no longer depends on one in-memory session (that would break across serverless instances). The browser still stores the token the same way.
+
+Set `SESSION_SECRET` in Vercel (any long random string).
+
+### 5. Scheduled sync uses Vercel Cron + batching
+
+`node-cron` still runs **locally**.
+
+On Vercel:
+
+- `GET/POST /api/cron/sync` is called by Vercel Cron every 5 minutes (`vercel.json`)
+- Each invocation syncs as many projects/files as it can before the function time limit
+- If work remains, it chains another invocation (`waitUntil`) and/or resumes on the next cron tick
+- Enable/disable and weekly day still come from the in-app Schedule UI
+
+Protect this route with `CRON_SECRET`. Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
+
+### 6. Manual sync can resume after a timeout
+
+If Vercel stops a project mid-sync, the UI retries that project. Files already uploaded are skipped via the SharePoint manifest / existing filenames.
+
+### 7. Large history folders are not deployed
+
+`.vercelignore` and `.gitignore` exclude:
+
+- `upload_history/`
+- `downloads/`
+- `sync_history/`
+- `failed_history/`
+- `.env`
+
+Do not upload secrets or the local history tree to Vercel.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env
+# fill in .env
+npm start
+```
+
+UI: [http://localhost:3000](http://localhost:3000)
+
+```bash
+npm run dev
+```
+
+## Deploy to Vercel
+
+**Use Vercel Pro** if you can. File sync needs:
+
+- Function `maxDuration` of **300 seconds** (Hobby is 60s)
+- Cron every 5 minutes (Hobby only allows a daily cron)
+
+### 1. Create the project
+
+Import this Git repo in the Vercel dashboard, or from the project folder:
+
+```bash
+npx vercel
+```
+
+### 2. Set environment variables
+
+In Vercel → Project → Settings → Environment Variables, add everything from `.env` **except** `PORT`.
+
+Required:
+
+| Variable | Purpose |
+|---|---|
+| `FILEVINE_CLIENT_ID` | Filevine OAuth client |
+| `FILEVINE_CLIENT_SECRET` | Filevine OAuth secret |
+| `FILEVINE_PAT` | Filevine personal access token |
+| `FILEVINE_ORG_ID` | Filevine org |
+| `FILEVINE_USER_ID` | Filevine user |
+| `FILEVINE_TOKEN_URL` | Usually `https://identity.filevine.com/connect/token` |
+| `FILEVINE_API` | Usually `https://api.filevineapp.com/fv-app/v2` |
+| `AZURE_TENANT_ID` | Azure AD tenant |
+| `AZURE_CLIENT_ID` | App registration client ID |
+| `AZURE_CLIENT_SECRET` | App registration secret |
+| `SHAREPOINT_SITE_ID` | SharePoint site id |
+| `SHAREPOINT_DRIVE_ID` | Document library drive id |
+| `SHAREPOINT_ROOT_FOLDER` | Root folder name, default `Filevine` |
+| `APP_USERNAME` | Login username |
+| `APP_PASSWORD` | Login password |
+| `SESSION_SECRET` | HMAC secret for login tokens |
+| `CRON_SECRET` | Shared secret for `/api/cron/sync` |
+
+Optional:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SYNC_CONCURRENCY` | `2` on Vercel, `6` locally | Parallel file transfers |
+| `SHAREPOINT_TIMEOUT_MS` | `120000` on Vercel | Graph upload timeout |
+| `FUNCTION_MAX_DURATION_MS` | `270000` | Stop starting new files before Vercel kills the function |
+
+Never commit `.env`.
+
+### 3. Deploy
+
+Production:
+
+```bash
+npx vercel --prod
+```
+
+Or push to the connected Git branch.
+
+### 4. Smoke test
+
+- Open the Vercel URL
+- `GET /health` should return `{ "status": "ok", "runtime": "serverless" }`
+- Log in with `APP_USERNAME` / `APP_PASSWORD`
+- Sync one project and confirm files appear in SharePoint
+
+## How a Vercel sync run works
+
+1. Browser calls `POST /api/projects/:id/sync` (SSE progress stream)
+2. Function authenticates to Filevine and SharePoint
+3. It lists documents, skips ones already uploaded, downloads the rest to `/tmp`, uploads to Graph
+4. After each success it writes the manifest to SharePoint `_sync-state`
+5. About 45 seconds before the 300s limit, it stops starting new files and returns `incomplete: true`
+6. The UI (manual sync) or cron chain (scheduled sync) starts the next batch
+
+Scheduled sync uses the same project sync code, one project after another, with a cursor saved in `_sync-state`.
+
+## Useful paths
+
+| Path | Role |
+|---|---|
+| `src/app.js` | Express app (listen locally, export for Vercel) |
+| `api/index.js` | Vercel function entry |
+| `vercel.json` | Rewrites, `maxDuration`, cron |
+| `src/config/runtime.js` | Detects Vercel and enforces the time budget |
+| `src/services/persistentJson.service.js` | Disk locally, SharePoint on Vercel |
+| `src/routes/cron.js` | Scheduled sync endpoint |
+| `public/` | Login + sync UI |
+
+## Limits to know
+
+- A single huge file that takes longer than the function timeout can still fail; retry the project
+- First Vercel deploy does not include local `upload_history/`; SharePoint folder listing is used so files are not uploaded twice
+- Hobby plan timeouts and daily-only cron are usually too small for a full firm library
+- Settings saved in the UI persist to SharePoint `_sync-state` on Vercel; they also still read from env vars
