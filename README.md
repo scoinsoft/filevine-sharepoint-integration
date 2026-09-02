@@ -51,9 +51,20 @@ Locally, the app still uses the original folders on disk.
 
 During a project sync it also lists files already in the SharePoint project folder, so existing files are skipped even if local history was not deployed.
 
-### 3. Downloads use `/tmp` on Vercel
+### 3. Large files stream Filevine → SharePoint
 
-Filevine files are downloaded to a temp directory, uploaded to SharePoint, then deleted. They are not stored in the git repo.
+Vercel `/tmp` cannot hold a multi-GB legal video. The sync no longer downloads the whole file to disk.
+
+Instead it:
+
+1. Gets a Filevine presigned URL
+2. Pulls a small HTTP Range chunk (10 MiB on Vercel)
+3. PUTs that chunk into a Microsoft Graph upload session
+4. Repeats until SharePoint has the file
+
+If the source does not support Range requests, it streams the body with backpressure so only one chunk is buffered at a time.
+
+Locally, leftover disk-download helpers still exist, but the sync path does not write the full file under `downloads/` or `/tmp`.
 
 ### 4. Sessions are signed tokens
 
@@ -141,12 +152,12 @@ Or push to the connected Git branch.
 
 1. Browser calls `POST /api/projects/:id/sync` (SSE progress stream)
 2. Function authenticates to Filevine and SharePoint
-3. It lists documents, skips ones already uploaded, downloads the rest to `/tmp`, uploads to Graph
+3. It lists documents, skips ones already uploaded, then **streams** the rest Filevine → Graph (chunked upload session; no full file on `/tmp`)
 4. After each success it writes the manifest to SharePoint `_sync-state`
-5. About 45 seconds before the 300s limit, it stops starting new files and returns `incomplete: true`
-6. The UI (manual sync) or cron chain (scheduled sync) starts the next batch
+5. About 20 seconds before the 300s limit, it stops starting new files (and will abort a chunked transfer in progress) and returns `incomplete: true`
+6. The UI retries that project; files already uploaded are skipped
 
-Scheduled sync uses the same project sync code, one project after another, with a cursor saved in `_sync-state`.
+A file that is still transferring when the time budget runs out is **not** marked uploaded, so the next run will retry it.
 
 ## Useful paths
 
@@ -163,7 +174,7 @@ Scheduled sync uses the same project sync code, one project after another, with 
 
 ## Limits to know
 
-- A single huge file that takes longer than the function timeout can still fail; retry the project
+- Streaming removes the `/tmp` size limit, but a single 6 GB file can still exceed the **300s** function timeout. Retry the project; the file will start again (Graph sessions are not persisted across invocations)
 - First Vercel deploy does not include local `upload_history/`; SharePoint folder listing is used so files are not uploaded twice
-- Hobby plan timeouts and daily-only cron are usually too small for a full firm library
+- Hobby plan timeouts are usually too small for a full firm library
 - Settings saved in the UI persist to SharePoint `_sync-state` on Vercel; they also still read from env vars

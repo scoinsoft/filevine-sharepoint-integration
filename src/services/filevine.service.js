@@ -335,14 +335,33 @@ async function listDocuments(accessToken, projectId) {
   }
 }
 
-async function getDownloadLink(accessToken, documentId) {
+async function getDownloadLink(accessToken, documentId, options = {}) {
   const client = getApiClient(accessToken);
+  const ttlSeconds = Number(options.ttlSeconds);
+  const downloadTtl =
+    Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? Math.floor(ttlSeconds) : 7200;
 
   try {
-    const response = await client.post('/Documents/batch/download', {
-      DocumentIds: [documentId],
-      DownloadUrlTimeToLive: 600,
-    });
+    let response;
+    try {
+      response = await client.post('/Documents/batch/download', {
+        DocumentIds: [documentId],
+        DownloadUrlTimeToLive: downloadTtl,
+      });
+    } catch (ttlError) {
+      if (downloadTtl > 600 && ttlError?.response?.status === 400) {
+        log('Filevine rejected long download TTL; retrying with 600s', {
+          documentId,
+          downloadTtl,
+        });
+        response = await client.post('/Documents/batch/download', {
+          DocumentIds: [documentId],
+          DownloadUrlTimeToLive: 600,
+        });
+      } else {
+        throw ttlError;
+      }
+    }
 
     log('Batch download link response', response.data);
 
@@ -932,6 +951,19 @@ async function downloadFromPresignedUrl(downloadLink, filename, projectId, proje
   throw formatAxiosError(`Failed to download file from presigned URL`, lastError);
 }
 
+async function getDocumentDownloadSource(accessToken, documentId, filename) {
+  const { downloadLink, versionKey, batchResponse } = await getDownloadLink(accessToken, documentId, {
+    ttlSeconds: 7200,
+  });
+
+  return {
+    downloadLink,
+    filename: sanitizeFileName(filename || versionKey || 'document'),
+    documentId,
+    batchResponse,
+  };
+}
+
 async function inspectDocumentMetadata(accessToken, documentId) {
   const client = getApiClient(accessToken);
 
@@ -1028,6 +1060,7 @@ module.exports = {
   getProject,
   listDocuments,
   getDownloadLink,
+  getDocumentDownloadSource,
   downloadFromPresignedUrl,
   downloadDocument,
   deleteLocalDownload,

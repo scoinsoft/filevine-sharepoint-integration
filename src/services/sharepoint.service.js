@@ -8,8 +8,9 @@ const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 const DEFAULT_TIMEOUT_MS = 180000;
 const SIMPLE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
 // Graph requires multiples of 320 KiB; max fragment is 60 MiB.
+const GRAPH_FRAGMENT_ALIGN_BYTES = 320 * 1024;
 // 40 MiB balances throughput vs memory under SYNC_CONCURRENCY parallel uploads.
-const UPLOAD_SESSION_CHUNK_BYTES = 40 * 1024 * 1024;
+const UPLOAD_SESSION_CHUNK_BYTES = 128 * GRAPH_FRAGMENT_ALIGN_BYTES;
 const MAX_RETRIES = 5;
 
 let cachedToken = null;
@@ -131,7 +132,27 @@ function isSharePointConflictSkipError(error) {
   return isNameAlreadyExistsError(error) || isResourceModifiedError(error);
 }
 
+function getStreamChunkBytes() {
+  const { isServerless } = require('../config/runtime');
+  // Keep only a small fragment in memory on Vercel (10 MiB = 32 × 320 KiB).
+  if (isServerless()) {
+    return 32 * GRAPH_FRAGMENT_ALIGN_BYTES;
+  }
+  return UPLOAD_SESSION_CHUNK_BYTES;
+}
+
+function throwIfUploadDeadline(filename) {
+  const { shouldStopForDeadline } = require('../config/runtime');
+  if (!shouldStopForDeadline()) return;
+  const err = new Error(
+    `Stopped transferring ${filename || 'file'} to stay within the function time limit; it was not recorded as uploaded`
+  );
+  err.code = 'UPLOAD_DEADLINE';
+  throw err;
+}
+
 function isRetryableUploadError(error) {
+  if (error?.code === 'UPLOAD_DEADLINE') return false;
   if (isSharePointConfigError(error)) return false;
   if (isNameAlreadyExistsError(error)) return false;
   if (isResourceModifiedError(error)) return true;
@@ -140,7 +161,7 @@ function isRetryableUploadError(error) {
   if ([408, 429, 500, 502, 503, 504].includes(status)) return true;
 
   const code = error?.code;
-  if (['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN', 'ENOENT'].includes(code)) {
+  if (['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN', 'ENOENT', 'RANGE_INTERRUPTED'].includes(code)) {
     return true;
   }
 
@@ -327,6 +348,10 @@ function isNameAlreadyExistsError(error) {
 }
 
 function formatGraphError(error, action) {
+  if (error?.code === 'UPLOAD_DEADLINE') {
+    return error;
+  }
+
   const configError = parseAzureAuthError(error);
   if (configError) {
     return configError;
@@ -425,6 +450,451 @@ async function createUploadSession(accessToken, itemPath) {
     throw new Error('SharePoint upload session failed: missing uploadUrl');
   }
   return uploadUrl;
+}
+
+function parseContentRangeTotal(contentRange) {
+  const match = String(contentRange || '').match(/\/(\d+)\s*$/);
+  if (!match) return 0;
+  const total = Number(match[1]);
+  return Number.isFinite(total) && total > 0 ? total : 0;
+}
+
+function readStreamToBuffer(stream, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+
+    function cleanup() {
+      stream.off('data', onData);
+      stream.off('end', onEnd);
+      stream.off('error', onError);
+    }
+
+    function onData(data) {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      if (total + buf.length > maxBytes) {
+        cleanup();
+        stream.destroy();
+        const err = new Error(`Download exceeded expected ${maxBytes} bytes`);
+        err.code = 'RANGE_OVERFLOW';
+        reject(err);
+        return;
+      }
+      chunks.push(buf);
+      total += buf.length;
+    }
+
+    function onEnd() {
+      cleanup();
+      resolve(Buffer.concat(chunks, total));
+    }
+
+    function onError(err) {
+      cleanup();
+      reject(err);
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+  });
+}
+
+async function readNextStreamChunk(stream, leftoverRef, wantBytes) {
+  const pieces = [];
+  let got = 0;
+
+  if (leftoverRef.buf && leftoverRef.buf.length) {
+    pieces.push(leftoverRef.buf);
+    got = leftoverRef.buf.length;
+    leftoverRef.buf = Buffer.alloc(0);
+    if (got >= wantBytes) {
+      const all = pieces[0];
+      leftoverRef.buf = all.subarray(wantBytes);
+      return all.subarray(0, wantBytes);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    function cleanup() {
+      stream.off('data', onData);
+      stream.off('end', onEnd);
+      stream.off('error', onError);
+    }
+
+    function onData(data) {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      pieces.push(buf);
+      got += buf.length;
+      if (got >= wantBytes) {
+        cleanup();
+        stream.pause();
+        const all = Buffer.concat(pieces, got);
+        leftoverRef.buf = all.subarray(wantBytes);
+        resolve(all.subarray(0, wantBytes));
+      }
+    }
+
+    function onEnd() {
+      cleanup();
+      if (got === 0) {
+        resolve(null);
+        return;
+      }
+      resolve(Buffer.concat(pieces, got));
+    }
+
+    function onError(err) {
+      cleanup();
+      reject(err);
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume();
+  });
+}
+
+async function putUploadSessionChunk(uploadUrl, chunk, offset, totalSize, contentType) {
+  const chunkEnd = offset + chunk.length;
+  const contentRange = `bytes ${offset}-${chunkEnd - 1}/${totalSize}`;
+  return axios.put(uploadUrl, chunk, {
+    headers: {
+      'Content-Length': chunk.length,
+      'Content-Range': contentRange,
+      'Content-Type': contentType || 'application/octet-stream',
+    },
+    timeout: getUploadTimeoutMs(),
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    validateStatus: (status) => status === 200 || status === 201 || status === 202,
+  });
+}
+
+async function probeRemoteSize(url, fallbackSize) {
+  const hinted = Number(fallbackSize);
+  const hintedOk = Number.isFinite(hinted) && hinted > 0 ? hinted : 0;
+  const probeTimeout = Math.min(getUploadTimeoutMs(), 30000);
+
+  try {
+    const res = await axios.get(url, {
+      headers: {
+        Range: 'bytes=0-0',
+        'Accept-Encoding': 'identity',
+      },
+      responseType: 'stream',
+      timeout: probeTimeout,
+      maxRedirects: 5,
+      validateStatus: (status) => status === 200 || status === 206,
+    });
+    try {
+      const fromRange = parseContentRangeTotal(res.headers['content-range']);
+      if (fromRange) {
+        return fromRange;
+      }
+      if (res.status === 200) {
+        const len = Number(res.headers['content-length']);
+        if (Number.isFinite(len) && len > 0) {
+          return len;
+        }
+      }
+    } finally {
+      res.data.destroy();
+    }
+  } catch {
+    // HEAD / hinted size below
+  }
+
+  try {
+    const head = await axios.head(url, {
+      headers: { 'Accept-Encoding': 'identity' },
+      timeout: probeTimeout,
+      maxRedirects: 5,
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+    const len = Number(head.headers['content-length']);
+    if (Number.isFinite(len) && len > 0) {
+      return len;
+    }
+  } catch {
+    // hinted size below
+  }
+
+  if (hintedOk) {
+    return hintedOk;
+  }
+
+  throw new Error('Cannot determine remote file size for chunked SharePoint upload');
+}
+
+function rangeNotSupportedError(stream, size) {
+  const err = new Error('Remote download does not support HTTP Range requests');
+  err.code = 'RANGE_NOT_SUPPORTED';
+  if (stream) {
+    try {
+      stream.pause();
+    } catch {
+      // ignore
+    }
+    err.stream = stream;
+  }
+  if (size) {
+    err.size = size;
+  }
+  return err;
+}
+
+async function fetchByteRange(url, start, endInclusive) {
+  const expected = endInclusive - start + 1;
+  let response;
+  try {
+    response = await axios.get(url, {
+      headers: {
+        Range: `bytes=${start}-${endInclusive}`,
+        'Accept-Encoding': 'identity',
+      },
+      responseType: 'stream',
+      timeout: getUploadTimeoutMs(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      maxRedirects: 5,
+      validateStatus: (status) => status === 200 || status === 206,
+    });
+  } catch (error) {
+    const status = error?.response?.status;
+    if (status === 400 || status === 403 || status === 416 || status === 501) {
+      throw rangeNotSupportedError();
+    }
+    throw error;
+  }
+
+  if (response.status === 200) {
+    const contentLength = Number(response.headers['content-length']);
+    const looksLikeFullFile =
+      start > 0 ||
+      !Number.isFinite(contentLength) ||
+      contentLength > expected + 1024;
+    if (looksLikeFullFile) {
+      if (start === 0) {
+        throw rangeNotSupportedError(
+          response.data,
+          Number.isFinite(contentLength) && contentLength > 0 ? contentLength : undefined
+        );
+      }
+      response.data.destroy();
+      throw rangeNotSupportedError();
+    }
+  }
+
+  return readStreamToBuffer(response.data, expected);
+}
+
+async function downloadRemoteToBuffer(url, expectedSize) {
+  const maxBytes = Math.max(expectedSize || 0, SIMPLE_UPLOAD_MAX_BYTES) + 1024;
+  const response = await axios.get(url, {
+    headers: { 'Accept-Encoding': 'identity' },
+    responseType: 'stream',
+    timeout: getUploadTimeoutMs(),
+    maxContentLength: maxBytes,
+    maxBodyLength: Infinity,
+    maxRedirects: 5,
+    validateStatus: (status) => status >= 200 && status < 300,
+  });
+  const buffer = await readStreamToBuffer(response.data, maxBytes);
+  if (expectedSize && buffer.length > expectedSize) {
+    return buffer.subarray(0, expectedSize);
+  }
+  return buffer;
+}
+
+async function openDownloadStream(url) {
+  const response = await axios.get(url, {
+    headers: { 'Accept-Encoding': 'identity' },
+    responseType: 'stream',
+    timeout: getUploadTimeoutMs(),
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+    maxRedirects: 5,
+    validateStatus: (status) => status >= 200 && status < 300,
+  });
+  try {
+    response.data.pause();
+  } catch {
+    // ignore
+  }
+  return response.data;
+}
+
+async function pumpDownloadStreamToSession(stream, { uploadUrl, totalSize, contentType, onProgress, filename }) {
+  const chunkBytes = getStreamChunkBytes();
+  const leftoverRef = { buf: Buffer.alloc(0) };
+  let offset = 0;
+  let result = null;
+  let lastReportedAt = 0;
+
+  reportUploadProgress(onProgress, filename, 0, totalSize);
+
+  try {
+    while (offset < totalSize) {
+      throwIfUploadDeadline(filename);
+      const want = Math.min(chunkBytes, totalSize - offset);
+      const chunk = await readNextStreamChunk(stream, leftoverRef, want);
+      if (!chunk || chunk.length === 0) {
+        throw new Error(`Download ended before file was complete (${offset}/${totalSize})`);
+      }
+      if (offset + chunk.length < totalSize && chunk.length !== want) {
+        throw new Error(`Short download stream at offset ${offset} (expected ${want}, got ${chunk.length})`);
+      }
+
+      const response = await putUploadSessionChunk(uploadUrl, chunk, offset, totalSize, contentType);
+      if (response.status === 200 || response.status === 201) {
+        result = response.data;
+        reportUploadProgress(onProgress, filename, totalSize, totalSize);
+        break;
+      }
+
+      offset += chunk.length;
+      const now = Date.now();
+      if (now - lastReportedAt >= 400 || offset >= totalSize) {
+        lastReportedAt = now;
+        reportUploadProgress(onProgress, filename, offset, totalSize);
+      }
+    }
+  } finally {
+    try {
+      stream.destroy();
+    } catch {
+      // ignore
+    }
+  }
+
+  if (result) {
+    return result;
+  }
+  throw new Error('SharePoint upload session did not complete');
+}
+
+async function transferByByteRanges({ downloadUrl, uploadUrl, totalSize, contentType, onProgress, filename }) {
+  const chunkBytes = getStreamChunkBytes();
+  let offset = 0;
+  let result = null;
+  let lastReportedAt = 0;
+
+  reportUploadProgress(onProgress, filename, 0, totalSize);
+
+  while (offset < totalSize) {
+    throwIfUploadDeadline(filename);
+    const chunkEnd = Math.min(offset + chunkBytes, totalSize);
+    let chunk;
+    try {
+      chunk = await fetchByteRange(downloadUrl, offset, chunkEnd - 1);
+    } catch (error) {
+      if (error.code === 'RANGE_NOT_SUPPORTED' && offset !== 0) {
+        const interrupted = new Error(
+          `HTTP Range stopped working mid-file at offset ${offset}; retry the file`
+        );
+        interrupted.code = 'RANGE_INTERRUPTED';
+        throw interrupted;
+      }
+      throw error;
+    }
+    if (!chunk.length) {
+      throw new Error(`Empty download range at offset ${offset}`);
+    }
+    if (offset + chunk.length < totalSize && chunk.length !== chunkEnd - offset) {
+      throw new Error(
+        `Short download range at offset ${offset} (expected ${chunkEnd - offset}, got ${chunk.length})`
+      );
+    }
+
+    const response = await putUploadSessionChunk(uploadUrl, chunk, offset, totalSize, contentType);
+    if (response.status === 200 || response.status === 201) {
+      result = response.data;
+      reportUploadProgress(onProgress, filename, totalSize, totalSize);
+      break;
+    }
+
+    offset += chunk.length;
+    const now = Date.now();
+    if (now - lastReportedAt >= 400 || offset >= totalSize) {
+      lastReportedAt = now;
+      reportUploadProgress(onProgress, filename, offset, totalSize);
+    }
+  }
+
+  if (result) {
+    return result;
+  }
+  throw new Error('SharePoint upload session did not complete');
+}
+
+async function transferRemoteToUploadSession(opts) {
+  try {
+    return await transferByByteRanges(opts);
+  } catch (error) {
+    if (error.code !== 'RANGE_NOT_SUPPORTED') {
+      throw error;
+    }
+
+    log('Presigned download does not support HTTP Range; streaming full body with backpressure', {
+      filename: opts.filename,
+    });
+
+    const stream = error.stream || (await openDownloadStream(opts.downloadUrl));
+    return pumpDownloadStreamToSession(stream, opts);
+  }
+}
+
+async function uploadRemoteToGraph(itemPath, downloadUrl, hintedSize, contentType, onProgress, filename) {
+  return withAccessToken(async (accessToken) => {
+    const totalSize = await probeRemoteSize(downloadUrl, hintedSize);
+    log('Resolved remote file size for stream upload', {
+      filename,
+      totalSize,
+      hintedSize: hintedSize || null,
+      chunkBytes: getStreamChunkBytes(),
+    });
+
+    if (totalSize <= SIMPLE_UPLOAD_MAX_BYTES) {
+      const buffer = await downloadRemoteToBuffer(downloadUrl, totalSize);
+      return uploadSmallFile(accessToken, itemPath, buffer, contentType, onProgress, filename);
+    }
+
+    let sessionAttempts = 0;
+    const maxSessionAttempts = 3;
+
+    while (sessionAttempts < maxSessionAttempts) {
+      sessionAttempts += 1;
+      const uploadUrl = await createUploadSession(accessToken, itemPath);
+      try {
+        return await transferRemoteToUploadSession({
+          downloadUrl,
+          uploadUrl,
+          totalSize,
+          contentType,
+          onProgress,
+          filename,
+        });
+      } catch (sessionError) {
+        if (sessionError.code === 'UPLOAD_DEADLINE') {
+          throw sessionError;
+        }
+        if (isResourceModifiedError(sessionError) && sessionAttempts < maxSessionAttempts) {
+          log('SharePoint chunk conflict; restarting upload session', {
+            filename,
+            itemPath,
+            attempt: sessionAttempts,
+          });
+          await delay(1000 * sessionAttempts);
+          continue;
+        }
+        throw sessionError;
+      }
+    }
+
+    throw new Error('SharePoint upload session did not complete');
+  });
 }
 
 async function uploadLargeFileFromPath(accessToken, itemPath, filePath, fileSize, contentType, onProgress, filename) {
@@ -556,11 +1026,114 @@ async function uploadToSharePoint({
   filename,
   contentType,
   filePath,
+  downloadUrl,
+  fileSize: hintedFileSize,
   onProgress,
 }) {
   const sharePointPath = buildSharePointPath(projectName, filename);
+  const mimeType = contentType || 'application/octet-stream';
+
+  if (downloadUrl) {
+    log('Streaming Filevine → SharePoint via Microsoft Graph', {
+      projectId,
+      filename,
+      sharePointPath,
+      contentType: mimeType,
+      hintedSize: hintedFileSize || null,
+      timeoutMs: getUploadTimeoutMs(),
+    });
+
+    try {
+      let lastError;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+        try {
+          const graphItem = await withUploadPathLock(sharePointPath, () =>
+            uploadRemoteToGraph(
+              sharePointPath,
+              downloadUrl,
+              hintedFileSize,
+              mimeType,
+              onProgress,
+              filename
+            )
+          );
+
+          log('Upload successful', {
+            projectId,
+            filename,
+            sharePointPath,
+            graphItemId: graphItem?.id || null,
+            size: graphItem?.size || hintedFileSize || null,
+            streamed: true,
+          });
+
+          return {
+            success: true,
+            message: 'File uploaded to SharePoint',
+            sharePointPath,
+            filename,
+            projectId,
+            projectName,
+            graphItemId: graphItem?.id || null,
+            webUrl: graphItem?.webUrl || null,
+            size: graphItem?.size || hintedFileSize || null,
+            streamed: true,
+          };
+        } catch (attemptError) {
+          lastError = attemptError;
+          if (attemptError?.code === 'UPLOAD_DEADLINE') {
+            throw attemptError;
+          }
+          if (isResourceModifiedError(attemptError) && attempt >= 2) {
+            throw attemptError;
+          }
+          if (attempt < MAX_RETRIES && isRetryableUploadError(attemptError)) {
+            const backoffMs = 1000 * attempt;
+            log('Retrying streamed SharePoint upload after error', {
+              projectId,
+              filename,
+              sharePointPath,
+              attempt,
+              maxAttempts: MAX_RETRIES,
+              code: attemptError.code || getGraphErrorCode(attemptError),
+              status: attemptError?.response?.status || null,
+              message: attemptError.message,
+              backoffMs,
+              resourceModified: isResourceModifiedError(attemptError),
+            });
+            await delay(backoffMs);
+            continue;
+          }
+          throw attemptError;
+        }
+      }
+
+      throw lastError || new Error('SharePoint upload failed: no response received');
+    } catch (error) {
+      if (isSharePointConflictSkipError(error)) {
+        log('SharePoint upload conflict; treating as already uploaded', {
+          projectId,
+          filename,
+          sharePointPath,
+          code: getGraphErrorCode(error) || 'conflict',
+        });
+      } else if (error?.code === 'UPLOAD_DEADLINE') {
+        log('Large file transfer stopped for function time limit', {
+          projectId,
+          filename,
+          sharePointPath,
+        });
+      } else {
+        logError('SharePoint upload failed', error);
+        log('Upload debug context', { projectId, filename, sharePointPath, streamed: true });
+      }
+      throw formatGraphError(error, 'upload');
+    }
+  }
+
   if (!filePath) {
-    throw new Error(`Missing local file path for upload: ${filename}`);
+    throw new Error(`Missing download URL or local file path for upload: ${filename}`);
   }
   if (!fs.existsSync(filePath)) {
     throw new Error(`Local file not found for upload: ${filePath}`);
@@ -573,7 +1146,7 @@ async function uploadToSharePoint({
     projectId,
     filename,
     sharePointPath,
-    contentType,
+    contentType: mimeType,
     size: fileSize,
     timeoutMs: getUploadTimeoutMs(),
   });
@@ -588,7 +1161,7 @@ async function uploadToSharePoint({
             sharePointPath,
             filePath,
             fileSize,
-            contentType || 'application/octet-stream',
+            mimeType,
             onProgress,
             filename
           )
@@ -663,6 +1236,18 @@ async function uploadFile(filePath, projectId, projectName, contentType, options
     filename,
     contentType: contentType || 'application/octet-stream',
     filePath,
+    onProgress: typeof options.onProgress === 'function' ? options.onProgress : null,
+  });
+}
+
+async function uploadFromDownloadUrl(downloadUrl, projectId, projectName, contentType, options = {}) {
+  return uploadToSharePoint({
+    projectId,
+    projectName,
+    filename: options.filename || 'document',
+    contentType: contentType || 'application/octet-stream',
+    downloadUrl,
+    fileSize: options.fileSize,
     onProgress: typeof options.onProgress === 'function' ? options.onProgress : null,
   });
 }
@@ -879,6 +1464,7 @@ async function deleteStateJson(relativePath) {
 module.exports = {
   uploadToSharePoint,
   uploadFile,
+  uploadFromDownloadUrl,
   buildSharePointPath,
   buildProjectFolderPath,
   sanitizeFolderName,

@@ -337,16 +337,24 @@ async function syncProject(projectId, projectName, options = {}) {
       });
     }
 
-    async function uploadWithProgress(filePath, mimeType, filename, documentId) {
-      return sharepointService.uploadFile(filePath, projectId, projectName, mimeType, {
-        filename,
-        onProgress: (progress) => {
-          emitTransferProgress(documentId, filename, {
-            ...progress,
-            stage: 'uploading',
-          });
-        },
-      });
+    async function streamUploadWithProgress(downloadUrl, mimeType, filename, documentId, fileSize) {
+      return sharepointService.uploadFromDownloadUrl(
+        downloadUrl,
+        projectId,
+        projectName,
+        mimeType,
+        {
+          filename,
+          fileSize,
+          onProgress: (progress) => {
+            emitTransferProgress(documentId, filename, {
+              ...progress,
+              stage: 'uploading',
+              bytesDownloaded: progress.bytesUploaded,
+            });
+          },
+        }
+      );
     }
 
     function skipDuplicateFilename(item) {
@@ -461,79 +469,48 @@ async function syncProject(projectId, projectName, options = {}) {
         return;
       }
 
-      let localFilePath = null;
+      const hintedSize = Number(document.size) || 0;
 
       emit('progress', {
-        stage: 'downloading',
+        stage: 'uploading',
         current: completed + 1,
         total,
         percent: Math.round((completed / total) * 100),
         currentFile: item.filename,
-        message: `Preparing ${item.filename}…`,
+        message: `Streaming ${item.filename} to SharePoint…`,
         succeeded: results.succeeded.length,
         failed: results.failed.length,
       });
       emitTransferProgress(document.documentId, item.filename, {
-        stage: 'downloading',
+        stage: 'uploading',
+        bytesUploaded: 0,
         bytesDownloaded: 0,
-        bytesTotal: Number(document.size) || 0,
+        bytesTotal: hintedSize,
         percent: 0,
       });
 
       try {
-        const download = await withTokenRetry('downloadDocument', (token) =>
-          filevineService.downloadDocument(
+        const source = await withTokenRetry('getDownloadLink', (token) =>
+          filevineService.getDocumentDownloadSource(
             token,
             document.documentId,
-            document.filename,
-            projectId,
-            projectName,
-            {
-              onProgress: (progress) =>
-                emitTransferProgress(document.documentId, item.filename, {
-                  ...progress,
-                  stage: 'downloading',
-                }),
-            }
+            document.filename
           )
         );
-        localFilePath = download.filePath;
 
-        emit('progress', {
-          stage: 'uploading',
-          current: completed + 1,
-          total,
-          percent: Math.round((completed / total) * 100),
-          currentFile: download.filename,
-          message: download.alreadyDownloaded
-            ? `Using local copy of ${download.filename}; uploading to SharePoint…`
-            : `Uploading ${download.filename} to SharePoint…`,
-          succeeded: results.succeeded.length,
-          failed: results.failed.length,
-        });
-        emitTransferProgress(document.documentId, download.filename, {
-          stage: 'uploading',
-          bytesUploaded: 0,
-          bytesTotal: Number(download.size) || 0,
-          percent: 0,
-          reusedLocalFile: Boolean(download.alreadyDownloaded),
-        });
-
-        const upload = await uploadWithProgress(
-          download.filePath,
-          download.mimeType,
-          download.filename,
-          document.documentId
+        const upload = await streamUploadWithProgress(
+          source.downloadLink,
+          document.contentType || 'application/octet-stream',
+          source.filename,
+          document.documentId,
+          hintedSize
         );
-
-        filevineService.deleteLocalDownload(download.filePath);
-        localFilePath = null;
 
         await filevineService.recordProjectUploadSuccess(
           projectId,
           projectName,
           document.documentId,
-          download.filename,
+          source.filename,
           uploadedDocumentIds,
           uploadedFilenames
         );
@@ -546,10 +523,10 @@ async function syncProject(projectId, projectName, options = {}) {
 
         const successItem = {
           ...item,
-          filename: download.filename,
+          filename: source.filename,
           sharePointPath: upload.sharePointPath,
-          size: download.size,
-          reusedLocalFile: Boolean(download.alreadyDownloaded),
+          size: upload.size || hintedSize || null,
+          streamed: true,
         };
         results.succeeded.push(successItem);
 
@@ -558,7 +535,7 @@ async function syncProject(projectId, projectName, options = {}) {
           total,
           succeeded: results.succeeded.length,
           failed: results.failed.length,
-          message: `Uploaded ${download.filename}`,
+          message: `Uploaded ${source.filename}`,
         });
       } catch (error) {
         if (sharepointService.isSharePointConfigError(error)) {
@@ -576,11 +553,6 @@ async function syncProject(projectId, projectName, options = {}) {
             filename: item.filename,
             errorCode: conflictCode,
           });
-
-          if (localFilePath) {
-            filevineService.deleteLocalDownload(localFilePath);
-            localFilePath = null;
-          }
 
           await filevineService.recordProjectUploadSuccess(
             projectId,
@@ -612,22 +584,24 @@ async function syncProject(projectId, projectName, options = {}) {
             message: `Skipped (already on SharePoint): ${item.filename}`,
           });
         } else {
-          logError(`Sync failed for document ${document.documentId}`, error);
-
-          if (localFilePath) {
-            log('Keeping local download after failed upload', { filePath: localFilePath });
+          if (error?.code === 'UPLOAD_DEADLINE') {
+            stoppedForDeadline = true;
           }
+
+          logError(`Sync failed for document ${document.documentId}`, error);
 
           const failItem = {
             ...item,
             error: error.message,
             errorCode:
-              sharepointService.isNameAlreadyExistsError?.(error)
-                ? 'nameAlreadyExists'
-                : sharepointService.isResourceModifiedError?.(error)
-                  ? 'resourceModified'
-                  : error.code || null,
-            localFilePath: localFilePath || null,
+              error?.code === 'UPLOAD_DEADLINE'
+                ? 'UPLOAD_DEADLINE'
+                : sharepointService.isNameAlreadyExistsError?.(error)
+                  ? 'nameAlreadyExists'
+                  : sharepointService.isResourceModifiedError?.(error)
+                    ? 'resourceModified'
+                    : error.code || null,
+            localFilePath: null,
           };
           results.failed.push(failItem);
           await filevineService.recordFailedUpload(
